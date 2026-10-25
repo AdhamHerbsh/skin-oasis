@@ -43,6 +43,13 @@
       "when": 1792963419930,
       "tag": "0005_wet_madame_masque",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792971343703,
+      "tag": "0006_repair_invoice_settings_columns",
+      "breakpoints": true
     }
   ]
 }
