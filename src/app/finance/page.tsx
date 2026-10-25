@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeftRight, ArrowRight, Banknote, Landmark, Plus, Receipt, Wallet, Pencil, Trash2 } from "lucide-react";
 import { getSessionUserId } from "@/server/auth/session";
 import { db } from "@/server/db";
-import { cashTransactions, cashboxes, permissions, users } from "@/server/db/schema";
+import { cashTransactions, cashboxes, permissions, settings, users } from "@/server/db/schema";
 import { addCashTransaction, createCashbox, deactivateCashbox, transferCash, updateCashbox } from "@/features/finance/actions";
 import { requirePermission } from "@/server/permissions";
 import { CloseDisclosureButton } from "@/components/close-disclosure-button";
@@ -30,6 +30,19 @@ export default async function FinancePage() {
   const canCreate = grants.some((grant) => grant.action === "create");
   const canEdit = grants.some((grant) => grant.action === "edit");
   const canDelete = grants.some((grant) => grant.action === "delete");
+  const [settingsRow] = await db.select({ locale: settings.locale }).from(settings).where(eq(settings.id, 1)).limit(1);
+  const locale = settingsRow?.locale === "en" ? "en" : "ar";
+  const text = (ar: string, en: string) => (locale === "en" ? en : ar);
+  const currency = locale === "en" ? "EGP" : "ج.م";
+  const transactionLabel = (kind: string) =>
+    ({
+      income: text("إيراد", "Income"),
+      expense: text("مصروف", "Expense"),
+      transfer_in: text("تحويل وارد", "Transfer in"),
+      transfer_out: text("تحويل صادر", "Transfer out"),
+      invoice_payment: text("تحصيل فاتورة", "Invoice payment"),
+      party_payment: text("سند عميل/مورد", "Party payment"),
+    })[kind] ?? kind;
 
   const [boxes, txs, aggregates, allBoxes] = await Promise.all([
     db.select().from(cashboxes).where(eq(cashboxes.active, true)),
@@ -54,13 +67,13 @@ export default async function FinancePage() {
     <main className="main standalone">
       <header className="topbar">
         <div>
-          <p className="eyebrow">الخزينة والمقبوضات</p>
-          <h1>المالية والصناديق النقدية</h1>
+          <p className="eyebrow">{text("الخزينة والمقبوضات", "Cash and receipts")}</p>
+          <h1>{text("المالية والصناديق النقدية", "Finance and cashboxes")}</h1>
         </div>
         <div className="top-actions">
           <Link className="secondary" href="/">
             <ArrowRight size={15} />
-            <span>الرئيسية</span>
+            <span>{text("الرئيسية", "Home")}</span>
           </Link>
         </div>
       </header>
@@ -97,23 +110,23 @@ export default async function FinancePage() {
               </div>
               <div>
                 <strong className={`text-2xl lg:text-3xl font-black font-mono tracking-tight block ${balanceColor}`}>
-                  {balance.toLocaleString("en-US", { maximumFractionDigits: 2 })} <small className="text-xs font-bold opacity-80">ج.م</small>
+                  {balance.toLocaleString("en-US", { maximumFractionDigits: 2 })} <small className="text-xs font-bold opacity-80">{currency}</small>
                 </strong>
                 <p className="text-xs font-medium opacity-75 mt-1">
-                  {box.kind === "cash" ? "صندوق كاشير نقدي" : isBank ? "حساب بنكي معتمد" : "محفظة إلكترونية"} · رصيد فعلي
+                  {box.kind === "cash" ? text("صندوق كاشير نقدي", "Cash register") : isBank ? text("حساب بنكي معتمد", "Bank account") : text("محفظة إلكترونية", "E-wallet")} · {text("رصيد فعلي", "Current balance")}
                 </p>
               </div>
               {(canEdit || canDelete) && (
                 <div className="mt-4 flex flex-wrap gap-2 border-t border-current/10 pt-3">
                   {canEdit && (
                     <details className="group w-full">
-                      <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-current/20 bg-white/70 px-3 py-2 text-xs font-bold"><Pencil size={13} /> تعديل بيانات الخزنة</summary>
+                      <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-current/20 bg-white/70 px-3 py-2 text-xs font-bold"><Pencil size={13} /> {text("تعديل بيانات الخزنة", "Edit cashbox")}</summary>
                       <form action={updateCashbox} className="form-grid mt-3 rounded-xl border border-current/15 bg-white/80 p-3">
                         <input type="hidden" name="id" value={box.id} />
-                        <label>اسم الخزنة<input name="name" defaultValue={box.name} required minLength={2} maxLength={100} /></label>
-                        <label>نوع الخزنة<select name="kind" defaultValue={box.kind}><option value="cash">نقدي</option><option value="bank">حساب بنكي</option><option value="wallet">محفظة إلكترونية</option></select></label>
-                        <label className="wide-field">الرصيد الافتتاحي (ج.م)<input name="openingBalance" type="number" min="0" step="0.01" defaultValue={box.openingBalance} required /></label>
-                        <button className="primary"><Pencil size={13} /> حفظ التعديلات</button>
+                        <label>{text("اسم الخزنة", "Cashbox name")}<input name="name" defaultValue={box.name} required minLength={2} maxLength={100} /></label>
+                        <label>{text("نوع الخزنة", "Cashbox type")}<select name="kind" defaultValue={box.kind}><option value="cash">{text("نقدي", "Cash")}</option><option value="bank">{text("حساب بنكي", "Bank account")}</option><option value="wallet">{text("محفظة إلكترونية", "E-wallet")}</option></select></label>
+                        <label className="wide-field">{text("الرصيد الافتتاحي", "Opening balance")} ({currency})<input name="openingBalance" type="number" min="0" step="0.01" defaultValue={box.openingBalance} required /></label>
+                        <button className="primary"><Pencil size={13} /> {text("حفظ التعديلات", "Save changes")}</button>
                       </form>
                     </details>
                   )}
@@ -121,7 +134,7 @@ export default async function FinancePage() {
                     <form action={deactivateCashbox} className="inline-flex">
                       <input type="hidden" name="id" value={box.id} />
                       <button type="submit" className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">
-                        <Trash2 size={13} /> حذف الخزنة
+                        <Trash2 size={13} /> {text("حذف الخزنة", "Delete cashbox")}
                       </button>
                     </form>
                   )}
@@ -141,28 +154,28 @@ export default async function FinancePage() {
               <span className="w-5 h-5 rounded-lg bg-emerald-200/80 group-open:bg-emerald-500 text-emerald-800 group-open:text-white flex items-center justify-center transition-colors">
                 <Plus size={13} className="transition-transform duration-200 group-open:rotate-45" />
               </span>
-              <span>إضافة صندوق نقدية / بنك</span>
+              <span>{text("إضافة صندوق نقدية / بنك", "Add cashbox / bank account")}</span>
             </summary>
             <form action={createCashbox} className="form-grid">
-              <CloseDisclosureButton title="إضافة صندوق أو حساب مالي جديد" />
+              <CloseDisclosureButton title={text("إضافة صندوق أو حساب مالي جديد", "Add cashbox or financial account")} />
               <label>
-                اسم الصندوق أو الحساب
-                <input name="name" required minLength={2} placeholder="مثال: الخزينة الرئيسية، كاشير الصالة" />
+                {text("اسم الصندوق أو الحساب", "Cashbox or account name")}
+                <input name="name" required minLength={2} placeholder={text("مثال: الخزينة الرئيسية، كاشير الصالة", "Example: Main cashbox, showroom register")} />
               </label>
               <label>
-                نوع الصندوق
+                {text("نوع الصندوق", "Cashbox type")}
                 <select name="kind">
-                  <option value="cash">نقدي (كاشير / خزينة)</option>
-                  <option value="bank">حساب بنكي</option>
-                  <option value="wallet">محفظة إلكترونية / فودافون كاش</option>
+                  <option value="cash">{text("نقدي (كاشير / خزينة)", "Cash (register / cashbox)")}</option>
+                  <option value="bank">{text("حساب بنكي", "Bank account")}</option>
+                  <option value="wallet">{text("محفظة إلكترونية", "E-wallet")}</option>
                 </select>
               </label>
               <label className="wide-field">
-                الرصيد الافتتاحي المبدئي (ج.م)
+                {text("الرصيد الافتتاحي المبدئي", "Opening balance")} ({currency})
                 <input name="openingBalance" type="number" min="0" step="0.01" defaultValue="0" required />
               </label>
               <button className="primary w-full py-2.5 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-0 cursor-pointer active:scale-98 transition-all">
-                حفظ الصندوق وتفعيله
+                {text("حفظ الصندوق وتفعيله", "Save and activate cashbox")}
               </button>
             </form>
           </details>
@@ -173,12 +186,12 @@ export default async function FinancePage() {
               <span className="w-5 h-5 rounded-lg bg-indigo-200/80 group-open:bg-indigo-500 text-indigo-800 group-open:text-white flex items-center justify-center transition-colors">
                 <Receipt size={13} className="transition-transform duration-200 group-open:scale-110" />
               </span>
-              <span>تسجيل دخل أو مصروف</span>
+              <span>{text("تسجيل دخل أو مصروف", "Record income or expense")}</span>
             </summary>
             <form action={addCashTransaction} className="form-grid">
-              <CloseDisclosureButton title="تسجيل سند دخل أو مصروف نقدي" />
+              <CloseDisclosureButton title={text("تسجيل سند دخل أو مصروف نقدي", "Record income or expense")} />
               <label>
-                الصندوق المتأثر
+                {text("الصندوق المتأثر", "Cashbox")}
                 <select name="cashboxId" required>
                   {boxes.map((box) => (
                     <option key={box.id} value={box.id}>
@@ -188,26 +201,26 @@ export default async function FinancePage() {
                 </select>
               </label>
               <label>
-                نوع الحركة
+                {text("نوع الحركة", "Transaction type")}
                 <select name="kind">
-                  <option value="income">إيراد / دخل نقدي (+)</option>
-                  <option value="expense">مصروف تشغيلي / نثريات (−)</option>
+                  <option value="income">{text("إيراد / دخل نقدي (+)", "Income (+)")}</option>
+                  <option value="expense">{text("مصروف تشغيلي / نثريات (−)", "Operating expense (−)")}</option>
                 </select>
               </label>
               <label>
-                التصنيف أو بند الصرف
-                <input name="category" required minLength={2} placeholder="مثال: كهرباء، إيجار، بوفيه، إيراد صيانة" />
+                {text("التصنيف أو بند الصرف", "Category or expense item")}
+                <input name="category" required minLength={2} placeholder={text("مثال: كهرباء، إيجار، بوفيه، إيراد صيانة", "Example: Electricity, rent, supplies, maintenance income")} />
               </label>
               <label>
-                المبلغ (ج.م)
+                {text("المبلغ", "Amount")} ({currency})
                 <input name="amount" type="number" min="0.01" step="0.01" required />
               </label>
               <label className="wide-field">
-                ملاحظات وتفاصيل إضافية
-                <input name="notes" placeholder="ملاحظات توضيحية لدفتر الحسابات" />
+                {text("ملاحظات وتفاصيل إضافية", "Additional notes")}
+                <input name="notes" placeholder={text("ملاحظات توضيحية لدفتر الحسابات", "Notes for the account ledger")} />
               </label>
               <button className="primary w-full py-2.5 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-700 text-white border-0 cursor-pointer active:scale-98 transition-all">
-                تسجيل الحركة وترحيلها
+                {text("تسجيل الحركة وترحيلها", "Record transaction")}
               </button>
             </form>
           </details>
@@ -218,12 +231,12 @@ export default async function FinancePage() {
               <span className="w-5 h-5 rounded-lg bg-purple-200/80 group-open:bg-purple-500 text-purple-800 group-open:text-white flex items-center justify-center transition-colors">
                 <ArrowLeftRight size={13} className="transition-transform duration-300 group-open:rotate-180" />
               </span>
-              <span>تحويل مالي بين الصناديق</span>
+              <span>{text("تحويل مالي بين الصناديق", "Transfer between cashboxes")}</span>
             </summary>
             <form action={transferCash} className="form-grid">
-              <CloseDisclosureButton title="سند تحويل نقدية بين الصناديق" />
+              <CloseDisclosureButton title={text("سند تحويل نقدية بين الصناديق", "Cashbox transfer")} />
               <label>
-                من الصندوق (المُحوِّل)
+                {text("من الصندوق (المُحوِّل)", "From cashbox")}
                 <select name="from" required>
                   {boxes.map((box) => (
                     <option key={box.id} value={box.id}>
@@ -233,7 +246,7 @@ export default async function FinancePage() {
                 </select>
               </label>
               <label>
-                إلى الصندوق (المُستلِم)
+                {text("إلى الصندوق (المُستلِم)", "To cashbox")}
                 <select name="to" required>
                   {boxes.map((box) => (
                     <option key={box.id} value={box.id}>
@@ -243,15 +256,15 @@ export default async function FinancePage() {
                 </select>
               </label>
               <label className="wide-field">
-                المبلغ المراد تحويله (ج.م)
+                {text("المبلغ المراد تحويله", "Transfer amount")} ({currency})
                 <input name="amount" type="number" min="0.01" step="0.01" required />
               </label>
               <label className="wide-field">
-                ملاحظات التحويل
-                <input name="notes" placeholder="مثال: إيداع نقدي في البنك، تغذية عهدة الكاشير" />
+                {text("ملاحظات التحويل", "Transfer notes")}
+                <input name="notes" placeholder={text("مثال: إيداع نقدي في البنك، تغذية عهدة الكاشير", "Example: Bank deposit, cash register float")} />
               </label>
               <button className="primary w-full py-2.5 rounded-xl font-bold bg-purple-600 hover:bg-purple-700 text-white border-0 cursor-pointer active:scale-98 transition-all">
-                تنفيذ التحويل المالي
+                {text("تنفيذ التحويل المالي", "Submit transfer")}
               </button>
             </form>
           </details>
@@ -262,22 +275,22 @@ export default async function FinancePage() {
       <section className="panel">
         <div className="panel-title">
           <div>
-            <h3>دفتر الحركات النقدية</h3>
-            <p>سجل المقبوضات والمصروفات والتحويلات المسجلة</p>
+            <h3>{text("دفتر الحركات النقدية", "Cash transaction ledger")}</h3>
+            <p>{text("سجل المقبوضات والمصروفات والتحويلات المسجلة", "Record of income, expenses, and transfers")}</p>
           </div>
-          <span className="date-pill">إجمالي السيولة: {grandTotalCash.toLocaleString("en-US")} ج.م</span>
+          <span className="date-pill">{text("إجمالي السيولة:", "Total liquidity:")} {grandTotalCash.toLocaleString("en-US")} {currency}</span>
         </div>
 
         <div className="desktop-table-only table-wrap">
           <table>
             <thead>
               <tr>
-                <th>التاريخ والوقت</th>
-                <th>الصندوق</th>
-                <th>نوع الحركة</th>
-                <th>التصنيف</th>
-                <th>المبلغ</th>
-                <th>ملاحظات</th>
+                <th>{text("التاريخ والوقت", "Date and time")}</th>
+                <th>{text("الصندوق", "Cashbox")}</th>
+                <th>{text("نوع الحركة", "Transaction type")}</th>
+                <th>{text("التصنيف", "Category")}</th>
+                <th>{text("المبلغ", "Amount")}</th>
+                <th>{text("ملاحظات", "Notes")}</th>
               </tr>
             </thead>
             <tbody>
@@ -290,7 +303,7 @@ export default async function FinancePage() {
                         {new Date(tx.createdAt).toLocaleString("en-US")}
                       </td>
                       <td className="font-bold text-[var(--ink)]">
-                        {allBoxes.find((box) => box.id === tx.cashboxId)?.name ?? "خزنة محذوفة"}
+                        {allBoxes.find((box) => box.id === tx.cashboxId)?.name ?? text("خزنة محذوفة", "Deleted cashbox")}
                       </td>
                       <td>
                         <span
@@ -300,24 +313,12 @@ export default async function FinancePage() {
                               : "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
                           }`}
                         >
-                          {tx.kind === "income"
-                            ? "إيراد"
-                            : tx.kind === "expense"
-                            ? "مصروف"
-                            : tx.kind === "transfer_in"
-                            ? "تحويل وارد"
-                            : tx.kind === "transfer_out"
-                            ? "تحويل صادر"
-                            : tx.kind === "invoice_payment"
-                            ? "تحصيل فاتورة"
-                            : tx.kind === "party_payment"
-                            ? "سند عميل/مورد"
-                            : tx.kind}
+                          {transactionLabel(tx.kind)}
                         </span>
                       </td>
                       <td className="text-xs font-semibold text-[var(--ink)]">{tx.category ?? "—"}</td>
                       <td className={`font-bold ${isPositive ? "text-emerald-700" : "text-rose-600"}`}>
-                        {isPositive ? "+" : "−"} {Number(tx.amount).toLocaleString("en-US")} ج.م
+                        {isPositive ? "+" : "−"} {Number(tx.amount).toLocaleString("en-US")} {currency}
                       </td>
                       <td className="text-xs text-[var(--muted)]">{tx.notes ?? "—"}</td>
                     </tr>
@@ -326,7 +327,7 @@ export default async function FinancePage() {
               ) : (
                 <tr>
                   <td colSpan={6} className="table-empty">
-                    لا توجد حركات مسجلة. أضف صندوقًا أو سجل عملية نقدية للبدء.
+                    {text("لا توجد حركات مسجلة. أضف صندوقًا أو سجل عملية نقدية للبدء.", "No transactions recorded. Add a cashbox or record a cash transaction to get started.")}
                   </td>
                 </tr>
               )}
@@ -339,7 +340,7 @@ export default async function FinancePage() {
           {txs.length ? (
             txs.map((tx) => {
               const isPositive = ["income", "transfer_in", "invoice_payment", "party_payment"].includes(tx.kind);
-              const boxName = allBoxes.find((box) => box.id === tx.cashboxId)?.name ?? "خزنة محذوفة";
+              const boxName = allBoxes.find((box) => box.id === tx.cashboxId)?.name ?? text("خزنة محذوفة", "Deleted cashbox");
               return (
                 <div key={`mob-tx-${tx.id}`} className="p-3 bg-[var(--panel)] border border-[var(--line)] rounded-xl shadow-xs space-y-2">
                   <div className="flex items-start justify-between gap-2">
@@ -356,28 +357,16 @@ export default async function FinancePage() {
                           : "bg-rose-50 text-rose-700 border border-rose-200"
                       }`}
                     >
-                      {tx.kind === "income"
-                        ? "إيراد"
-                        : tx.kind === "expense"
-                        ? "مصروف"
-                        : tx.kind === "transfer_in"
-                        ? "تحويل وارد"
-                        : tx.kind === "transfer_out"
-                        ? "تحويل صادر"
-                        : tx.kind === "invoice_payment"
-                        ? "تحصيل فاتورة"
-                        : tx.kind === "party_payment"
-                        ? "سند عميل/مورد"
-                        : tx.kind}
+                      {transactionLabel(tx.kind)}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between gap-2 py-1.5 px-2.5 bg-[var(--bg)] rounded-lg border border-[var(--line)]">
                     <span className="text-xs text-[var(--muted)] font-semibold truncate max-w-[60%]">
-                      {tx.category ? `${tx.category} · ` : ""}{tx.notes ?? "بدون ملاحظات"}
+                      {tx.category ? `${tx.category} · ` : ""}{tx.notes ?? text("بدون ملاحظات", "No notes")}
                     </span>
                     <b className={`text-sm font-black font-mono shrink-0 ${isPositive ? "text-emerald-700" : "text-rose-600"}`}>
-                      {isPositive ? "+" : "−"} {Number(tx.amount).toLocaleString("en-US")} ج.م
+                      {isPositive ? "+" : "−"} {Number(tx.amount).toLocaleString("en-US")} {currency}
                     </b>
                   </div>
                 </div>
@@ -385,7 +374,7 @@ export default async function FinancePage() {
             })
           ) : (
             <div className="p-6 text-center text-sm text-[var(--muted)] bg-[var(--panel)] border border-[var(--line)] rounded-xl">
-              لا توجد حركات مسجلة.
+              {text("لا توجد حركات مسجلة.", "No transactions recorded.")}
             </div>
           )}
         </div>

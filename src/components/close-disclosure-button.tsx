@@ -2,8 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
+import { useI18n } from "@/lib/i18n-client";
 
 export function CloseDisclosureButton({ title }: { title?: string }) {
+  const { locale } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -52,15 +54,15 @@ export function CloseDisclosureButton({ title }: { title?: string }) {
       <button
         type="button"
         className="close-disclosure"
-        aria-label="إغلاق النافذة"
-        title="إغلاق (Esc)"
+        aria-label={locale === "en" ? "Close dialog" : "إغلاق النافذة"}
+        title={locale === "en" ? "Close (Esc)" : "إغلاق (Esc)"}
         onClick={(event) => {
           const disclosure = event.currentTarget.closest("details");
           if (disclosure) disclosure.open = false;
         }}
       >
         <X size={15} />
-        <span>إغلاق</span>
+        <span>{locale === "en" ? "Close" : "إغلاق"}</span>
       </button>
     </div>
   );

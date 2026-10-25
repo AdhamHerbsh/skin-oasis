@@ -2,7 +2,7 @@ import "server-only";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/server/db";
 import { cashboxBalance, restoreEditedInvoiceStock, reverseCashKind } from "@/server/services/ledger-math";
-import { cashTransactions, cashboxes, invoiceLines, invoices, parties, partyLedger, products, stockMovements } from "@/server/db/schema";
+import { auditLogs, cashTransactions, cashboxes, invoiceLines, invoices, parties, partyLedger, products, stockMovements } from "@/server/db/schema";
 
 export type InvoiceInput = {
   type: "sale" | "purchase" | "sale_return" | "purchase_return";
@@ -226,6 +226,184 @@ export async function createInvoice(input: InvoiceInput, userId: string) {
         userId,
       });
     }
+
+    return invoice;
+  });
+}
+
+export async function deleteInvoice(invoiceId: string, userId: string) {
+  return db.transaction(async (tx) => {
+    const [invoice] = await tx
+      .select()
+      .from(invoices)
+      .where(eq(invoices.id, invoiceId))
+      .for("update")
+      .limit(1);
+    if (!invoice) throw new Error("INVOICE_NOT_FOUND");
+
+    const [linkedReturn] = await tx
+      .select({ id: invoices.id })
+      .from(invoices)
+      .where(eq(invoices.originalInvoiceId, invoice.id))
+      .limit(1);
+    if (linkedReturn) throw new Error("INVOICE_HAS_LINKED_RETURNS");
+
+    const movements = await tx
+      .select()
+      .from(stockMovements)
+      .where(eq(stockMovements.invoiceId, invoice.id));
+    const stockDeltas = new Map<string, number>();
+    for (const movement of movements) {
+      const direction =
+        movement.type === "adjustment"
+          ? invoice.type === "sale"
+            ? 1
+            : invoice.type === "purchase"
+              ? -1
+              : 0
+          : movement.type === "sale" || movement.type === "purchase_return"
+            ? -1
+            : 1;
+      stockDeltas.set(
+        movement.productId,
+        (stockDeltas.get(movement.productId) ?? 0) + direction * Number(movement.quantity)
+      );
+    }
+
+    const productIds = [...stockDeltas.keys()].sort();
+    const lockedProducts = productIds.length
+      ? await tx.select().from(products).where(inArray(products.id, productIds)).orderBy(products.id).for("update")
+      : [];
+    const deletedPurchaseLines = invoice.type === "purchase"
+      ? await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, invoice.id))
+      : [];
+    for (const product of lockedProducts) {
+      const reversedStock = Number(product.stock) - (stockDeltas.get(product.id) ?? 0);
+      if (reversedStock < 0) throw new Error(`CANNOT_REVERSE_INVOICE_STOCK:${product.name}`);
+      const productLines = deletedPurchaseLines.filter((line) => line.productId === product.id);
+      let restoredCost: string | undefined;
+      if (productLines.length > 0) {
+        const newerPurchase = await tx
+          .select({ id: invoices.id })
+          .from(invoiceLines)
+          .innerJoin(invoices, eq(invoiceLines.invoiceId, invoices.id))
+          .where(and(
+            eq(invoiceLines.productId, product.id),
+            eq(invoices.type, "purchase"),
+            sql`${invoices.createdAt} > ${invoice.createdAt}`
+          ))
+          .limit(1);
+        const oldCosts = productLines.map((line) => {
+          const factor = Number(line.description.match(/×\s*(\d+(?:\.\d+)?)/)?.[1] ?? 1);
+          return Number(line.costPrice) / factor;
+        });
+        const purchaseCosts = movements
+          .filter((movement) => movement.productId === product.id && movement.type === "purchase")
+          .map((movement) => Number(movement.unitCost));
+        const previousCost = oldCosts[0];
+        const appliedCost = purchaseCosts[0];
+        const oldCostsAreConsistent = oldCosts.every(
+          (cost) => Number.isFinite(cost) && Math.abs(cost - previousCost) < 0.005
+        );
+        const purchaseCostsAreConsistent = purchaseCosts.every(
+          (cost) => Number.isFinite(cost) && Math.abs(cost - appliedCost) < 0.005
+        );
+        if (
+          newerPurchase.length === 0 &&
+          purchaseCosts.length > 0 &&
+          oldCostsAreConsistent &&
+          purchaseCostsAreConsistent &&
+          Math.abs(Number(product.costPrice) - appliedCost) < 0.005
+        ) {
+          restoredCost = money(previousCost);
+        }
+      }
+      await tx.update(products).set({
+        stock: String(reversedStock),
+        ...(restoredCost !== undefined ? { costPrice: restoredCost } : {}),
+      }).where(eq(products.id, product.id));
+    }
+
+    const invoiceCash = await tx
+      .select()
+      .from(cashTransactions)
+      .where(eq(cashTransactions.invoiceId, invoice.id));
+    const cashboxIds = [...new Set(invoiceCash.map((entry) => entry.cashboxId))].sort();
+    const lockedCashboxes = cashboxIds.length
+      ? await tx.select().from(cashboxes).where(inArray(cashboxes.id, cashboxIds)).orderBy(cashboxes.id).for("update")
+      : [];
+    const cashboxesById = new Map(lockedCashboxes.map((cashbox) => [cashbox.id, cashbox]));
+
+    for (const cashboxId of cashboxIds) {
+      const cashbox = cashboxesById.get(cashboxId);
+      if (!cashbox) throw new Error("CASHBOX_NOT_FOUND");
+      const existingTransactions = await tx
+        .select({ kind: cashTransactions.kind, amount: cashTransactions.amount })
+        .from(cashTransactions)
+        .where(eq(cashTransactions.cashboxId, cashboxId));
+      const balance = cashboxBalance(cashbox.openingBalance, existingTransactions);
+      const reversal = invoiceCash
+        .filter((entry) => entry.cashboxId === cashboxId)
+        .reduce((sum, entry) => {
+          const kind = reverseCashKind(entry.kind);
+          if (!kind) throw new Error("CANNOT_REVERSE_INVOICE_CASH_TRANSACTION");
+          return sum + cashboxBalance(0, [{ kind, amount: entry.amount }]);
+        }, 0);
+      if (balance + reversal < -0.005) throw new Error("CANNOT_REVERSE_INVOICE_CASH_BALANCE");
+    }
+
+    const ledgerEntries = await tx
+      .select()
+      .from(partyLedger)
+      .where(eq(partyLedger.invoiceId, invoice.id));
+
+    for (const entry of invoiceCash) {
+      const kind = reverseCashKind(entry.kind);
+      if (!kind) throw new Error("CANNOT_REVERSE_INVOICE_CASH_TRANSACTION");
+      await tx.insert(cashTransactions).values({
+        cashboxId: entry.cashboxId,
+        kind,
+        amount: entry.amount,
+        category: "إلغاء فاتورة",
+        notes: `عكس حركة الفاتورة ${invoice.number}`,
+        partyId: entry.partyId,
+        userId,
+      });
+    }
+
+    for (const entry of ledgerEntries) {
+      await tx.insert(partyLedger).values({
+        partyId: entry.partyId,
+        kind: "adjustment",
+        debit: entry.credit,
+        credit: entry.debit,
+        notes: `عكس قيد الفاتورة ${invoice.number} عند الحذف`,
+      });
+    }
+
+    for (const [productId, delta] of stockDeltas) {
+      if (delta !== 0) {
+        await tx.insert(stockMovements).values({
+          productId,
+          type: "adjustment",
+          quantity: String(Math.abs(delta)),
+          reason: `عكس أثر الفاتورة ${invoice.number} عند الحذف`,
+          userId,
+        });
+      }
+    }
+
+    await tx.delete(cashTransactions).where(eq(cashTransactions.invoiceId, invoice.id));
+    await tx.delete(partyLedger).where(eq(partyLedger.invoiceId, invoice.id));
+    await tx.delete(stockMovements).where(eq(stockMovements.invoiceId, invoice.id));
+    await tx.insert(auditLogs).values({
+      userId,
+      action: "delete",
+      entity: "invoice",
+      entityId: invoice.id,
+      details: { number: invoice.number, type: invoice.type },
+    });
+    await tx.delete(invoices).where(eq(invoices.id, invoice.id));
 
     return invoice;
   });

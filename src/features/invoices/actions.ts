@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requirePermission } from "@/server/permissions";
-import { createInvoice, updateInvoice } from "@/server/services/invoices";
+import { createInvoice, deleteInvoice, updateInvoice } from "@/server/services/invoices";
 import { zUuid, zOptionalUuid } from "@/lib/validation";
 
 const schema = z.object({
@@ -45,4 +45,16 @@ export async function saveInvoice(formData: FormData) {
   const { id: invoiceId } = invoice;
   revalidatePath("/invoices"); revalidatePath("/parties"); revalidatePath("/finance"); revalidatePath("/inventory"); revalidatePath("/", "layout");
   redirect(`/invoices/${invoiceId}`);
+}
+
+export async function removeInvoice(formData: FormData) {
+  const userId = await requirePermission("invoices", "delete");
+  const invoiceId = zUuid.parse(formData.get("id"));
+  await deleteInvoice(invoiceId, userId);
+  revalidatePath("/invoices");
+  revalidatePath("/parties");
+  revalidatePath("/finance");
+  revalidatePath("/inventory");
+  revalidatePath("/reports");
+  revalidatePath("/", "layout");
 }

@@ -4,10 +4,11 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowRight, Filter } from "lucide-react";
 import { getSessionUserId } from "@/server/auth/session";
 import { db } from "@/server/db";
-import { invoices, parties, partyLedger } from "@/server/db/schema";
+import { invoices, parties, partyLedger, settings } from "@/server/db/schema";
 import { PrintButton } from "@/components/print-button";
 import { requirePermission } from "@/server/permissions";
 import { formatAmount } from "@/lib/number-format";
+import { Locale } from "@/lib/i18n";
 
 export default async function PartyStatement({
   params,
@@ -20,6 +21,18 @@ export default async function PartyStatement({
   await requirePermission("parties", "view");
 
   const [{ id }, query] = await Promise.all([params, searchParams]);
+  const [settingsRow] = await db.select({ locale: settings.locale }).from(settings).where(eq(settings.id, 1)).limit(1);
+  const locale = (settingsRow?.locale === "en" ? "en" : "ar") as Locale;
+  const text = (ar: string, en: string) => (locale === "en" ? en : ar);
+  const currency = locale === "en" ? "EGP" : "ج.م";
+  const kindLabel = (kind: string) =>
+    ({
+      sale: text("فاتورة بيع", "Sales invoice"),
+      purchase: text("فاتورة شراء", "Purchase invoice"),
+      sale_return: text("مرتجع مبيعات", "Sales return"),
+      purchase_return: text("مرتجع مشتريات", "Purchase return"),
+      payment: text("دفعة مالية", "Payment"),
+    })[kind] ?? text("حركة حساب", "Account transaction");
   const [party] = await db.select().from(parties).where(eq(parties.id, id)).limit(1);
   if (!party) notFound();
 
@@ -76,14 +89,14 @@ export default async function PartyStatement({
     <main className="main standalone">
       <header className="topbar print-hide">
         <div>
-          <p className="eyebrow">كشف حساب {party.type === "customer" ? "عميل" : "مورد"}</p>
+          <p className="eyebrow">{text("كشف حساب", "Account statement")} {party.type === "customer" ? text("عميل", "Customer") : text("مورد", "Supplier")}</p>
           <h1>{party.name}</h1>
         </div>
         <div className="top-actions">
-          <PrintButton label="طباعة كشف الحساب" />
+          <PrintButton label={text("طباعة كشف الحساب", "Print account statement")} />
           <Link className="secondary" href="/parties">
             <ArrowRight size={15} />
-            <span>رجوع للأطراف</span>
+            <span>{text("رجوع للأطراف", "Back to accounts")}</span>
           </Link>
         </div>
       </header>
@@ -92,17 +105,17 @@ export default async function PartyStatement({
       <section className="panel statement-paper">
         <div className="paper-header">
           <div>
-            <h2>كشف حساب تفصيلي: {party.name}</h2>
+            <h2>{text("كشف حساب تفصيلي:", "Detailed account statement:")} {party.name}</h2>
             <p className="text-xs text-[var(--muted)] mt-1">
-              {party.type === "customer" ? "حساب عميل (مبيعات)" : "حساب مورد (مشتريات وتوريد)"}
-              {party.phone && ` · الهاتف: ${party.phone}`}
-              {party.email && ` · البريد: ${party.email}`}
+              {party.type === "customer" ? text("حساب عميل (مبيعات)", "Customer account (sales)") : text("حساب مورد (مشتريات وتوريد)", "Supplier account (purchases and supplies)")}
+              {party.phone && ` · ${text("الهاتف:", "Phone:")} ${party.phone}`}
+              {party.email && ` · ${text("البريد:", "Email:")} ${party.email}`}
             </p>
           </div>
           <div className="text-left">
-            <span className="text-xs text-[var(--muted)] block mb-1">الرصيد الصافي الحالي</span>
+            <span className="text-xs text-[var(--muted)] block mb-1">{text("الرصيد الصافي الحالي", "Current net balance")}</span>
             <span className={`text-xl font-extrabold ${finalBalance > 0 ? "text-indigo-700" : finalBalance < 0 ? "text-rose-600" : "text-emerald-700"}`}>
-              {finalBalance.toLocaleString("en-US", { maximumFractionDigits: 2 })} ج.م
+              {finalBalance.toLocaleString("en-US", { maximumFractionDigits: 2 })} {currency}
             </span>
           </div>
         </div>
@@ -110,16 +123,16 @@ export default async function PartyStatement({
         {/* Date Filter Bar */}
         <form className="date-filter print-hide" method="get">
           <label>
-            <span>من تاريخ</span>
+            <span>{text("من تاريخ", "From date")}</span>
             <input type="date" name="from" defaultValue={query.from} />
           </label>
           <label>
-            <span>إلى تاريخ</span>
+            <span>{text("إلى تاريخ", "To date")}</span>
             <input type="date" name="to" defaultValue={query.to} />
           </label>
           <button className="secondary flex items-center gap-1.5 h-[36px]">
             <Filter size={13} />
-            <span>تصفية الفترة</span>
+            <span>{text("تصفية الفترة", "Filter period")}</span>
           </button>
         </form>
 
@@ -128,12 +141,12 @@ export default async function PartyStatement({
           <table>
             <thead>
               <tr>
-                <th>التاريخ والوقت</th>
-                <th>البيان والتفاصيل</th>
-                <th>رقم الفاتورة المرتبطة</th>
-                <th className="text-center">مدين (+)</th>
-                <th className="text-center">دائن (−)</th>
-                <th className="text-center">الرصيد التراكمي</th>
+                <th>{text("التاريخ والوقت", "Date and time")}</th>
+                <th>{text("البيان والتفاصيل", "Description")}</th>
+                <th>{text("رقم الفاتورة المرتبطة", "Related invoice")}</th>
+                <th className="text-center">{text("مدين (+)", "Debit (+)")}</th>
+                <th className="text-center">{text("دائن (−)", "Credit (−)")}</th>
+                <th className="text-center">{text("الرصيد التراكمي", "Running balance")}</th>
               </tr>
             </thead>
             <tbody>
@@ -144,18 +157,7 @@ export default async function PartyStatement({
                       {new Date(entry.createdAt).toLocaleString("en-US")}
                     </td>
                     <td className="font-semibold text-[var(--ink)]">
-                      {entry.notes ??
-                        (entry.kind === "sale"
-                          ? "فاتورة بيع"
-                          : entry.kind === "purchase"
-                          ? "فاتورة شراء"
-                          : entry.kind === "sale_return"
-                          ? "مرتجع مبيعات"
-                          : entry.kind === "purchase_return"
-                          ? "مرتجع مشتريات"
-                          : entry.kind === "payment"
-                          ? "دفعة مالية"
-                          : "حركة حساب")}
+                      {entry.notes ?? kindLabel(entry.kind)}
                     </td>
                     <td className="font-mono text-xs">
                       {entry.invoiceId ? (
@@ -167,20 +169,20 @@ export default async function PartyStatement({
                       )}
                     </td>
                     <td className="text-center font-semibold">
-                      {entry.debit > 0 ? `${formatAmount(entry.debit)} ج.م` : "—"}
+                      {entry.debit > 0 ? `${formatAmount(entry.debit)} ${currency}` : "—"}
                     </td>
                     <td className="text-center font-semibold">
-                      {entry.credit > 0 ? `${formatAmount(entry.credit)} ج.م` : "—"}
+                      {entry.credit > 0 ? `${formatAmount(entry.credit)} ${currency}` : "—"}
                     </td>
                     <td className="text-center font-bold text-[var(--ink)]">
-                      {formatAmount(entry.balance)} ج.م
+                      {formatAmount(entry.balance)} {currency}
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td colSpan={6} className="table-empty">
-                    لا توجد حركات مالية مسجلة في الفترة المحددة لهذا الحساب.
+                    {text("لا توجد حركات مالية مسجلة في الفترة المحددة لهذا الحساب.", "No financial transactions were recorded for this account during the selected period.")}
                   </td>
                 </tr>
               )}
@@ -189,7 +191,7 @@ export default async function PartyStatement({
         </div>
 
         <p className="text-xs text-[var(--muted)] mt-4 pt-3 border-t border-[var(--line)]">
-          * ملاحظة محاسبية: الرصيد الموجب يمثل مديونية مستحقة للتحصيل من العميل، أو مستحقات للمورد واجبة السداد.
+          {text("* ملاحظة محاسبية: الرصيد الموجب يمثل مديونية مستحقة للتحصيل من العميل، أو مستحقات للمورد واجبة السداد.", "* Accounting note: a positive balance represents an amount receivable from a customer or payable to a supplier.")}
         </p>
       </section>
     </main>

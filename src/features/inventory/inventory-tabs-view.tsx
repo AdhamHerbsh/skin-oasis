@@ -84,6 +84,7 @@ export function InventoryTabsView({
   };
 
   const { t, locale, isRtl } = useI18n();
+  const text = (ar: string, en: string) => (locale === "en" ? en : ar);
   const localeCode = "en-US";
 
   const [activeTab, setActiveTab] = useState<"products" | "categories" | "units">("products");
@@ -848,8 +849,8 @@ export function InventoryTabsView({
                     <FolderPlus size={16} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-[var(--ink)]">إضافة قسم أو تصنيف جديد</h3>
-                    <p className="text-[11px] text-[var(--muted)]">تنظيم المنتجات في مجموعات لتسهيل الفرز والتقارير</p>
+                    <h3 className="text-sm font-bold text-[var(--ink)]">{text("إضافة قسم أو تصنيف جديد", "Add a new category")}</h3>
+                    <p className="text-[11px] text-[var(--muted)]">{text("تنظيم المنتجات في مجموعات لتسهيل الفرز والتقارير", "Organize products into groups for easier filtering and reporting")}</p>
                   </div>
                 </div>
                 <span className="hidden sm:inline-flex items-center text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/70">
@@ -887,7 +888,7 @@ export function InventoryTabsView({
           <div className="flex items-center justify-between px-1">
             <h4 className="text-xs font-bold text-[var(--ink)] flex items-center gap-2">
               <FolderTree size={15} className="text-indigo-600" />
-              <span>الأقسام والتصنيفات المسجلة</span>
+              <span>{text("الأقسام والتصنيفات المسجلة", "Registered categories")}</span>
             </h4>
             <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
               {categories.length} تصنيف
@@ -1096,12 +1097,12 @@ export function InventoryTabsView({
                     <Boxes size={16} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-[var(--ink)]">تسجيل وحدة قياس وعبوة جديدة</h3>
-                    <p className="text-[11px] text-[var(--muted)]">تعريف معاملات الكراتين والعلب لتحويل الكميات تلقائياً إلى قطع</p>
+                    <h3 className="text-sm font-bold text-[var(--ink)]">{text("تسجيل وحدة قياس وعبوة جديدة", "Register a new unit or package")}</h3>
+                    <p className="text-[11px] text-[var(--muted)]">{text("تعريف معاملات الكراتين والعلب لتحويل الكميات تلقائياً إلى قطع", "Define carton and pack factors to automatically convert quantities into pieces")}</p>
                   </div>
                 </div>
                 <span className="hidden sm:inline-flex items-center text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/70">
-                  معامل التعبئة والتجزئة
+                  {text("معامل التعبئة والتجزئة", "Packaging conversion factor")}
                 </span>
               </div>
               <form action={createUnitAction} className="p-4 sm:p-5">
@@ -1145,8 +1146,8 @@ export function InventoryTabsView({
                   </div>
                 </div>
                 <div className="mt-3 pt-3 border-t border-[var(--line)] flex items-center gap-2 text-[11px] text-[var(--muted)]">
-                  <span className="text-indigo-600 font-bold">💡 إرشاد:</span>
-                  <span>اكتب اسم العبوة (مثال: كرتونة)، وحدد كم قطعة بداخلها في معامل التحويل (مثال: 24).</span>
+                  <span className="text-indigo-600 font-bold">{text("💡 إرشاد:", "💡 Tip:")}</span>
+                  <span>{text("اكتب اسم العبوة (مثال: كرتونة)، وحدد كم قطعة بداخلها في معامل التحويل (مثال: 24).", "Enter the package name (e.g., carton) and the number of pieces it contains in the conversion factor (e.g., 24).")}</span>
                 </div>
               </form>
             </div>
@@ -1156,7 +1157,7 @@ export function InventoryTabsView({
           <div className="flex items-center justify-between px-1">
             <h4 className="text-xs font-bold text-[var(--ink)] flex items-center gap-2">
               <Boxes size={15} className="text-indigo-600" />
-              <span>وحدات القياس والعبوات المسجلة</span>
+              <span>{text("وحدات القياس والعبوات المسجلة", "Registered units and packages")}</span>
             </h4>
             <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
               {units.length} وحدة

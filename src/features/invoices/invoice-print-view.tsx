@@ -54,10 +54,12 @@ type InvoiceData = {
 
 export function InvoicePrintView({ data }: { data: InvoiceData }) {
   const { t, locale } = useI18n();
+  const text = (ar: string, en: string) => (locale === "en" ? en : ar);
+  const currency = locale === "en" ? "EGP" : "ج.م";
   const [format, setFormat] = useState<"a4" | "thermal" | "dispatch">("a4");
   const { invoice, party, org, lines, invoiceLogo } = data;
   const remaining = Math.max(0, Number(invoice.total) - Number(invoice.paid));
-  const dateFormatted = new Date(invoice.createdAt).toLocaleString("en-US", {
+  const dateFormatted = new Date(invoice.createdAt).toLocaleString(locale === "en" ? "en-US" : "ar-EG", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -144,7 +146,7 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
               {invoiceLogo ? (
                 <Image
                   src={invoiceLogo}
-                  alt="شعار المؤسسة"
+                  alt={text("شعار المؤسسة", "Organization logo")}
                   width={64}
                   height={64}
                   unoptimized
@@ -159,12 +161,12 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
                 <h2 className="text-xl font-black text-[var(--ink)]">{org?.organizationName ?? "Apex Software"}</h2>
                 <p className="text-xs font-bold text-[var(--muted)] mt-1">
                   {invoice.type === "sale"
-                    ? "فاتورة مبيعات ضريبية تجارية"
+                    ? text("فاتورة مبيعات ضريبية تجارية", "Commercial sales tax invoice")
                     : invoice.type === "purchase"
-                    ? "فاتورة مشتريات وتوريد بضائع"
+                    ? text("فاتورة مشتريات وتوريد بضائع", "Purchase and goods supply invoice")
                     : invoice.type === "sale_return"
-                    ? "إشعار دائن — مرتجع مبيعات"
-                    : "إشعار مدين — مرتجع مشتريات"}
+                    ? text("إشعار دائن — مرتجع مبيعات", "Credit note — sales return")
+                    : text("إشعار مدين — مرتجع مشتريات", "Debit note — purchase return")}
                 </p>
                 {org?.phone && (
                   <p className="text-xs font-semibold text-[var(--muted)] mt-0.5">📞 {org.phone}</p>
@@ -174,15 +176,15 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
 
             <div className="paper-meta text-left">
               <strong className="block text-base font-black text-[var(--ink)]">
-                رقم الفاتورة: <span className="font-mono text-indigo-700">{invoice.number}</span>
+                {text("رقم الفاتورة:", "Invoice number:")} <span className="font-mono text-indigo-700">{invoice.number}</span>
               </strong>
-              <span className="block text-xs text-[var(--muted)] mt-1">التاريخ: {dateFormatted}</span>
-              <span className="block text-xs text-[var(--muted)]">الطرف: <b className="text-[var(--ink)]">{party?.name ?? "عميل صالة نقدي"}</b></span>
-              {party?.phone && <span className="block text-xs text-[var(--muted)]">الهاتف: {party.phone}</span>}
-              {party?.address && <span className="block text-xs text-[var(--muted)]">العنوان: {party.address}</span>}
+              <span className="block text-xs text-[var(--muted)] mt-1">{text("التاريخ:", "Date:")} {dateFormatted}</span>
+              <span className="block text-xs text-[var(--muted)]">{text("الطرف:", "Party:")} <b className="text-[var(--ink)]">{party?.name ?? text("عميل صالة نقدي", "Walk-in customer")}</b></span>
+              {party?.phone && <span className="block text-xs text-[var(--muted)]">{text("الهاتف:", "Phone:")} {party.phone}</span>}
+              {party?.address && <span className="block text-xs text-[var(--muted)]">{text("العنوان:", "Address:")} {party.address}</span>}
               <div className="mt-2">
                 <span className={`status ${invoice.status}`}>
-                  {invoice.status === "paid" ? "مدفوعة بالكامل" : invoice.status === "partial" ? "مدفوعة جزئياً" : "غير مدفوعة"}
+                  {invoice.status === "paid" ? text("مدفوعة بالكامل", "Paid in full") : invoice.status === "partial" ? text("مدفوعة جزئياً", "Partially paid") : text("غير مدفوعة", "Unpaid")}
                 </span>
               </div>
             </div>
@@ -194,10 +196,10 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
               <thead>
                 <tr>
                   <th className="w-12 text-center">#</th>
-                  <th>اسم الصنف والبيان</th>
-                  <th className="text-center w-28">الكمية</th>
-                  <th className="text-center w-32">سعر الوحدة</th>
-                  <th className="text-center w-36">الإجمالي</th>
+                  <th>{text("اسم الصنف والبيان", "Item description")}</th>
+                  <th className="text-center w-28">{text("الكمية", "Quantity")}</th>
+                  <th className="text-center w-32">{text("سعر الوحدة", "Unit price")}</th>
+                  <th className="text-center w-36">{text("الإجمالي", "Total")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -206,9 +208,9 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
                     <td className="text-center text-xs text-[var(--muted)] font-mono">{idx + 1}</td>
                     <td className="font-bold text-[var(--ink)]">{line.description}</td>
                     <td className="text-center font-bold">{Number(line.quantity).toLocaleString("en-US")}</td>
-                    <td className="text-center font-semibold">{Number(line.unitPrice).toLocaleString("en-US")} ج.م</td>
+                    <td className="text-center font-semibold">{Number(line.unitPrice).toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {currency}</td>
                     <td className="text-center font-bold text-[var(--ink)]">
-                      {Number(line.lineTotal).toLocaleString("en-US")} ج.م
+                      {Number(line.lineTotal).toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {currency}
                     </td>
                   </tr>
                 ))}
@@ -219,33 +221,33 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
           {/* Financial Totals */}
           <section className="invoice-totals">
             <p>
-              <span>المجموع قبل الخصم:</span>
-              <b>{Number(invoice.subtotal).toLocaleString("en-US")} ج.م</b>
+              <span>{text("المجموع قبل الخصم:", "Subtotal before discount:")}</span>
+              <b>{Number(invoice.subtotal).toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {currency}</b>
             </p>
             {Number(invoice.discount) > 0 && (
               <p>
-                <span>الخصم الممنوح:</span>
-                <b className="text-rose-600">− {Number(invoice.discount).toLocaleString("en-US")} ج.م</b>
+                <span>{text("الخصم الممنوح:", "Discount:")}</span>
+                <b className="text-rose-600">− {Number(invoice.discount).toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {currency}</b>
               </p>
             )}
             {Number(invoice.tax) > 0 && (
               <p>
-                <span>ضريبة القيمة المضافة:</span>
-                <b>+ {Number(invoice.tax).toLocaleString("en-US")} ج.م</b>
+                <span>{text("ضريبة القيمة المضافة:", "VAT:")}</span>
+                <b>+ {Number(invoice.tax).toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {currency}</b>
               </p>
             )}
             <p className="grand-total">
-              <span>الصافي المطلوب:</span>
-              <b>{Number(invoice.total).toLocaleString("en-US")} ج.م</b>
+              <span>{text("الصافي المطلوب:", "Net total due:")}</span>
+              <b>{Number(invoice.total).toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {currency}</b>
             </p>
             <p>
-              <span>المسدد نقداً:</span>
-              <b className="text-emerald-700">{Number(invoice.paid).toLocaleString("en-US")} ج.م</b>
+              <span>{text("المسدد نقداً:", "Amount paid:")}</span>
+              <b className="text-emerald-700">{Number(invoice.paid).toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {currency}</b>
             </p>
             {remaining > 0 && (
               <p className="font-bold text-rose-600">
-                <span>المتبقي في الذمة:</span>
-                <b>{remaining.toLocaleString("en-US", { maximumFractionDigits: 2 })} ج.م</b>
+                <span>{text("المتبقي في الذمة:", "Balance due:")}</span>
+                <b>{remaining.toLocaleString(locale === "en" ? "en-US" : "ar-EG", { maximumFractionDigits: 2 })} {currency}</b>
               </p>
             )}
           </section>
@@ -253,11 +255,11 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
           {/* Signatures & Footer */}
           <div className="mt-12 pt-6 border-t border-[var(--line)] grid grid-cols-2 gap-8 text-center text-xs text-[var(--muted)]">
             <div>
-              <p className="mb-8 font-semibold">توقيع المستلم بما يفيد المعاينة والاستلام:</p>
+              <p className="mb-8 font-semibold">{text("توقيع المستلم بما يفيد المعاينة والاستلام:", "Recipient signature confirming inspection and receipt:")}</p>
               <div className="border-b border-dashed border-slate-400 w-48 mx-auto" />
             </div>
             <div>
-              <p className="mb-8 font-semibold">توقيع المحاسب / إدارة المبيعات:</p>
+              <p className="mb-8 font-semibold">{text("توقيع المحاسب / إدارة المبيعات:", "Accountant / sales department signature:")}</p>
               <div className="border-b border-dashed border-slate-400 w-48 mx-auto" />
             </div>
           </div>
@@ -280,7 +282,7 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
               <div className="flex justify-center mb-2">
                 <Image
                   src={invoiceLogo}
-                  alt="شعار"
+                  alt={text("شعار", "Logo")}
                   width={48}
                   height={48}
                   unoptimized
@@ -290,21 +292,21 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
             )}
             <h2 className="text-base font-black">{org?.organizationName ?? "Apex Software"}</h2>
             <p className="text-[11px] mt-0.5">
-              {invoice.type === "sale" ? "إيصال مبيعات نقدية" : "إيصال توريد"}
+              {invoice.type === "sale" ? text("إيصال مبيعات نقدية", "Sales receipt") : text("إيصال توريد", "Purchase receipt")}
             </p>
             {org?.phone && <p className="text-[10px] font-semibold mt-0.5">📞 {org.phone}</p>}
-            <p className="text-[10px] text-slate-600 mt-1">رقم الفاتورة: #{invoice.number}</p>
+            <p className="text-[10px] text-slate-600 mt-1">{text("رقم الفاتورة:", "Invoice number:")} #{invoice.number}</p>
             <p className="text-[10px] text-slate-600">{dateFormatted}</p>
-            <p className="text-[11px] font-bold mt-1">الطرف: {party?.name ?? "عميل صالة"}</p>
+            <p className="text-[11px] font-bold mt-1">{text("الطرف:", "Party:")} {party?.name ?? text("عميل صالة", "Walk-in customer")}</p>
           </div>
 
           <div className="py-2 border-b border-dashed border-black">
             <table className="w-full text-[11px]">
               <thead>
                 <tr className="border-b border-slate-400">
-                  <th className="text-right py-1">الصنف</th>
-                  <th className="text-center py-1">الكمية</th>
-                  <th className="text-left py-1">الإجمالي</th>
+                  <th className="text-right py-1">{text("الصنف", "Item")}</th>
+                  <th className="text-center py-1">{text("الكمية", "Qty")}</th>
+                  <th className="text-left py-1">{text("الإجمالي", "Total")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-dotted divide-slate-300">
@@ -321,39 +323,39 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
 
           <div className="py-2 space-y-1 text-xs border-b border-dashed border-black">
             <div className="flex justify-between">
-              <span>المجموع:</span>
-              <span>{formatAmount(invoice.subtotal)} ج.م</span>
+              <span>{text("المجموع:", "Subtotal:")}</span>
+              <span>{formatAmount(invoice.subtotal)} {currency}</span>
             </div>
             {Number(invoice.discount) > 0 && (
               <div className="flex justify-between text-rose-600">
-                <span>الخصم:</span>
-                <span>−{formatAmount(invoice.discount)} ج.م</span>
+                <span>{text("الخصم:", "Discount:")}</span>
+                <span>−{formatAmount(invoice.discount)} {currency}</span>
               </div>
             )}
             {Number(invoice.tax) > 0 && (
               <div className="flex justify-between">
-                <span>الضريبة:</span>
-                <span>+{formatAmount(invoice.tax)} ج.م</span>
+                <span>{text("الضريبة:", "Tax:")}</span>
+                <span>+{formatAmount(invoice.tax)} {currency}</span>
               </div>
             )}
             <div className="flex justify-between text-sm font-black pt-1 border-t border-black">
-              <span>الصافي المطلوب:</span>
-              <span>{formatAmount(invoice.total)} ج.م</span>
+              <span>{text("الصافي المطلوب:", "Net total due:")}</span>
+              <span>{formatAmount(invoice.total)} {currency}</span>
             </div>
             <div className="flex justify-between">
-              <span>المدفوع:</span>
-              <span>{formatAmount(invoice.paid)} ج.م</span>
+              <span>{text("المدفوع:", "Paid:")}</span>
+              <span>{formatAmount(invoice.paid)} {currency}</span>
             </div>
             {remaining > 0 && (
               <div className="flex justify-between font-bold text-rose-700">
-                <span>المتبقي:</span>
-                <span>{formatAmount(remaining)} ج.م</span>
+                <span>{text("المتبقي:", "Remaining:")}</span>
+                <span>{formatAmount(remaining)} {currency}</span>
               </div>
             )}
           </div>
 
           <div className="pt-3 text-center text-[10px] space-y-1">
-            <p className="font-bold">شكراً لتعاملكم معنا!</p>
+            <p className="font-bold">{text("شكراً لتعاملكم معنا!", "Thank you for your business!")}</p>
             {org?.invoiceFooter && <p className="whitespace-pre-line">{org.invoiceFooter}</p>}
           </div>
         </article>
@@ -369,7 +371,7 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
               {invoiceLogo ? (
                 <Image
                   src={invoiceLogo}
-                  alt="شعار المؤسسة"
+                  alt={text("شعار المؤسسة", "Organization logo")}
                   width={52}
                   height={52}
                   unoptimized
@@ -381,8 +383,8 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
                 </div>
               )}
               <div>
-                <h2 className="text-xl font-black text-[var(--ink)]">إذن صرف وتسليم بضاعة من المستودع</h2>
-                <p className="text-xs text-[var(--muted)] font-bold">مستند تحضير ومطابقة المخزون والتسليم للعميل</p>
+                <h2 className="text-xl font-black text-[var(--ink)]">{text("إذن صرف وتسليم بضاعة من المستودع", "Warehouse dispatch and delivery slip")}</h2>
+                <p className="text-xs text-[var(--muted)] font-bold">{text("مستند تحضير ومطابقة المخزون والتسليم للعميل", "Document for picking, stock verification, and customer delivery")}</p>
                 {org?.phone && (
                   <p className="text-xs font-semibold text-indigo-700 mt-0.5">📞 {org.phone}</p>
                 )}
@@ -391,14 +393,14 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
 
             <div className="paper-meta text-left">
               <strong className="block text-lg font-black text-[var(--ink)] font-mono">
-                كود الإذن: {invoice.number}
+                {text("كود الإذن:", "Dispatch number:")} {invoice.number}
               </strong>
-              <span className="block text-xs text-[var(--muted)]">تاريخ ووقت التحضير: {dateFormatted}</span>
+              <span className="block text-xs text-[var(--muted)]">{text("تاريخ ووقت التحضير:", "Prepared at:")} {dateFormatted}</span>
               <span className="block text-xs font-bold text-indigo-700">
-                اسم المستلم: {party?.name ?? "عميل صالة"}
+                {text("اسم المستلم:", "Recipient:")} {party?.name ?? text("عميل صالة", "Walk-in customer")}
               </span>
-              {party?.phone && <span className="block text-xs text-[var(--muted)]">هاتف التواصل: {party.phone}</span>}
-              {party?.address && <span className="block text-xs text-[var(--muted)]">عنوان التسليم: {party.address}</span>}
+              {party?.phone && <span className="block text-xs text-[var(--muted)]">{text("هاتف التواصل:", "Contact phone:")} {party.phone}</span>}
+              {party?.address && <span className="block text-xs text-[var(--muted)]">{text("عنوان التسليم:", "Delivery address:")} {party.address}</span>}
             </div>
           </header>
 
@@ -407,11 +409,11 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
             <table>
               <thead>
                 <tr className="bg-slate-50 text-slate-700">
-                  <th className="w-16 text-center">فحص</th>
+                  <th className="w-16 text-center">{text("فحص", "Check")}</th>
                   <th className="w-12 text-center">#</th>
-                  <th>اسم الصنف ومواصفات البند</th>
-                  <th className="text-center w-36">الكمية المصروفة</th>
-                  <th className="text-center w-32">الحالة المخزنية</th>
+                  <th>{text("اسم الصنف ومواصفات البند", "Item description")}</th>
+                  <th className="text-center w-36">{text("الكمية المصروفة", "Quantity dispatched")}</th>
+                  <th className="text-center w-32">{text("الحالة المخزنية", "Stock status")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -423,10 +425,10 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
                     <td className="text-center text-xs text-[var(--muted)] font-mono">{idx + 1}</td>
                     <td className="font-bold text-[var(--ink)] text-sm">{line.description}</td>
                     <td className="text-center font-mono font-black text-base text-indigo-700">
-                      {Number(line.quantity).toLocaleString("en-US")} قطعة
+                      {Number(line.quantity).toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {text("قطعة", "pcs")}
                     </td>
                     <td className="text-center text-xs font-semibold text-emerald-700">
-                      تم الصرف من المستودع
+                      {text("تم الصرف من المستودع", "Dispatched from warehouse")}
                     </td>
                   </tr>
                 ))}
@@ -437,7 +439,7 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
           {/* Notes */}
           {invoice.notes && (
             <div className="p-3 bg-[var(--bg)] border border-[var(--line)] rounded-lg mb-6 text-xs">
-              <span className="font-bold block mb-1">ملاحظات التحضير والشحن:</span>
+              <span className="font-bold block mb-1">{text("ملاحظات التحضير والشحن:", "Picking and shipping notes:")}</span>
               <span>{invoice.notes}</span>
             </div>
           )}
@@ -445,16 +447,16 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
           {/* Warehouse Signatures */}
           <div className="mt-8 pt-6 border-t-2 border-slate-300 grid grid-cols-3 gap-4 text-center text-xs">
             <div className="p-3 bg-[var(--bg)] border border-[var(--line)] rounded-lg">
-              <p className="font-bold text-[var(--ink)] mb-10">أمين المستودع (المحضّر)</p>
-              <p className="border-t border-dashed border-slate-400 pt-2 text-[11px] text-[var(--muted)]">التوقيع والاسم</p>
+              <p className="font-bold text-[var(--ink)] mb-10">{text("أمين المستودع (المحضّر)", "Warehouse keeper (prepared by)")}</p>
+              <p className="border-t border-dashed border-slate-400 pt-2 text-[11px] text-[var(--muted)]">{text("التوقيع والاسم", "Signature and name")}</p>
             </div>
             <div className="p-3 bg-[var(--bg)] border border-[var(--line)] rounded-lg">
-              <p className="font-bold text-[var(--ink)] mb-10">مندوب الشحن / السائق</p>
-              <p className="border-t border-dashed border-slate-400 pt-2 text-[11px] text-[var(--muted)]">التوقيع ورقم المركبة</p>
+              <p className="font-bold text-[var(--ink)] mb-10">{text("مندوب الشحن / السائق", "Delivery driver")}</p>
+              <p className="border-t border-dashed border-slate-400 pt-2 text-[11px] text-[var(--muted)]">{text("التوقيع ورقم المركبة", "Signature and vehicle number")}</p>
             </div>
             <div className="p-3 bg-[var(--bg)] border border-[var(--line)] rounded-lg">
-              <p className="font-bold text-[var(--ink)] mb-10">توقيع العميل / المستلم</p>
-              <p className="border-t border-dashed border-slate-400 pt-2 text-[11px] text-[var(--muted)]">تم الاستلام بحالة سليمة</p>
+              <p className="font-bold text-[var(--ink)] mb-10">{text("توقيع العميل / المستلم", "Customer / recipient signature")}</p>
+              <p className="border-t border-dashed border-slate-400 pt-2 text-[11px] text-[var(--muted)]">{text("تم الاستلام بحالة سليمة", "Received in good condition")}</p>
             </div>
           </div>
         </article>

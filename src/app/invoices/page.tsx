@@ -1,23 +1,27 @@
 import Link from "next/link";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { FilePlus, ArrowRight, Printer, ReceiptText, TrendingUp, CheckCircle2, Clock } from "lucide-react";
 import { getSessionUserId } from "@/server/auth/session";
 import { db } from "@/server/db";
-import { invoices, parties, settings } from "@/server/db/schema";
+import { invoices, parties, permissions, settings, users } from "@/server/db/schema";
 import { requirePermission } from "@/server/permissions";
 import { InvoicesTableView } from "@/features/invoices/invoices-table-view";
 import { translate, Locale } from "@/lib/i18n";
 
 export default async function InvoicesPage() {
   if (!(await getSessionUserId())) redirect("/login");
-  await requirePermission("invoices", "view");
+  const userId = await requirePermission("invoices", "view");
 
-  const [settingsRow] = await db
-    .select({ locale: settings.locale })
-    .from(settings)
-    .where(eq(settings.id, 1))
-    .limit(1);
+  const [[settingsRow], deleteGrant] = await Promise.all([
+    db.select({ locale: settings.locale }).from(settings).where(eq(settings.id, 1)).limit(1),
+    db
+      .select({ id: permissions.id })
+      .from(users)
+      .innerJoin(permissions, eq(users.roleId, permissions.roleId))
+      .where(and(eq(users.id, userId), eq(users.active, true), eq(permissions.module, "invoices"), eq(permissions.action, "delete")))
+      .limit(1),
+  ]);
 
   const locale = (settingsRow?.locale ?? "ar") as Locale;
   const localeCode = "en-US";
@@ -128,7 +132,7 @@ export default async function InvoicesPage() {
           </span>
         </div>
 
-        <InvoicesTableView rows={rows} />
+        <InvoicesTableView rows={rows} canDelete={deleteGrant.length > 0} />
       </section>
     </main>
   );

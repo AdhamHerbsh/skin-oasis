@@ -58,17 +58,28 @@ type LedgerEntry = {
   createdAt: Date | string;
 };
 
-function ledgerKindLabel(kind: string) {
-  const labels: Record<string, string> = {
-    sale: "فاتورة بيع",
-    purchase: "فاتورة شراء",
-    sale_return: "مرتجع مبيعات",
-    purchase_return: "مرتجع مشتريات",
-    invoice: "فاتورة تجارية",
-    payment: "سند قبض / دفع",
-    opening: "رصيد أول المدة",
+function ledgerKindLabel(kind: string, locale: "ar" | "en") {
+  const labels = {
+    ar: {
+      sale: "فاتورة بيع",
+      purchase: "فاتورة شراء",
+      sale_return: "مرتجع مبيعات",
+      purchase_return: "مرتجع مشتريات",
+      invoice: "فاتورة تجارية",
+      payment: "سند قبض / دفع",
+      opening: "رصيد أول المدة",
+    },
+    en: {
+      sale: "Sales invoice",
+      purchase: "Purchase invoice",
+      sale_return: "Sales return",
+      purchase_return: "Purchase return",
+      invoice: "Commercial invoice",
+      payment: "Payment",
+      opening: "Opening balance",
+    },
   };
-  return labels[kind] ?? kind;
+  return labels[locale][kind as keyof (typeof labels)["en"]] ?? kind;
 }
 
 type TabKey = "all" | "customers" | "suppliers" | "debtors" | "statement";
@@ -105,6 +116,8 @@ export function PartiesTabsView({
   organization?: { name: string; logo?: string | null };
 }) {
   const { t, locale, isRtl } = useI18n();
+  const text = (ar: string, en: string) => (locale === "en" ? en : ar);
+  const currency = locale === "en" ? "EGP" : "ج.م";
 
   const canCheck = (action: string) => {
     if (typeof can === "function") return can(action);
@@ -441,15 +454,15 @@ export function PartiesTabsView({
                                 </summary>
                                 <form action={registerPaymentAction} className="inline-form">
                                   <CloseDisclosureButton
-                                    title={`تسجيل سند ${p.type === "customer" ? "قبض" : "صرف"} لـ: ${p.name}`}
+                                    title={`${text("تسجيل سند", "Record")} ${p.type === "customer" ? text("قبض", "receipt") : text("صرف", "payment")} ${text("لـ:", "for")} ${p.name}`}
                                   />
                                   <input type="hidden" name="partyId" value={p.id} />
                                   <label>
-                                    المبلغ (ج.م)
+                                    {text("المبلغ", "Amount")} ({currency})
                                     <input name="amount" type="number" step="0.01" min="0.01" required />
                                   </label>
                                   <label>
-                                    الصندوق / الخزينة
+                                    {text("الصندوق / الخزينة", "Cashbox")}
                                     <select name="cashboxId" required>
                                       {cashboxes.map((b) => (
                                         <option key={b.id} value={b.id}>
@@ -459,13 +472,13 @@ export function PartiesTabsView({
                                     </select>
                                   </label>
                                   <label>
-                                    البيان / ملاحظات السند
+                                    {text("البيان / ملاحظات السند", "Description / payment notes")}
                                     <input
                                       name="notes"
-                                      defaultValue={p.type === "customer" ? "تحصيل دفعة حساب" : "سداد دفعة للمورد"}
+                                      defaultValue={p.type === "customer" ? text("تحصيل دفعة حساب", "Customer account payment") : text("سداد دفعة للمورد", "Supplier payment")}
                                     />
                                   </label>
-                                  <button className="primary">تأكيد وترحيل السند</button>
+                                  <button className="primary">{text("تأكيد وترحيل السند", "Confirm and record payment")}</button>
                                 </form>
                               </details>
                             )}
@@ -478,34 +491,34 @@ export function PartiesTabsView({
                                   <span>{t("common.edit", "تعديل")}</span>
                                 </summary>
                                 <form action={savePartyAction} className="form-grid">
-                                  <CloseDisclosureButton title={`تعديل بيانات: ${p.name}`} />
+                                  <CloseDisclosureButton title={`${text("تعديل بيانات:", "Edit details:")} ${p.name}`} />
                                   <input type="hidden" name="id" value={p.id} />
                                   <label>
-                                    نوع الحساب
+                                    {text("نوع الحساب", "Account type")}
                                     <select name="type" defaultValue={p.type}>
-                                      <option value="customer">عميل</option>
-                                      <option value="supplier">مورد</option>
+                                      <option value="customer">{t("parties.customer", "عميل")}</option>
+                                      <option value="supplier">{t("parties.supplier", "مورد")}</option>
                                     </select>
                                   </label>
                                   <label>
-                                    الاسم بالكامل
+                                    {text("الاسم بالكامل", "Full name")}
                                     <input name="name" defaultValue={p.name} required />
                                   </label>
                                   <label>
-                                    رقم الهاتف
+                                    {text("رقم الهاتف", "Phone")}
                                     <input name="phone" defaultValue={p.phone ?? ""} />
                                   </label>
                                   <label>
-                                    البريد الإلكتروني
+                                    {text("البريد الإلكتروني", "Email")}
                                     <input name="email" defaultValue={p.email ?? ""} />
                                   </label>
                                   <label>
-                                    العنوان
+                                    {t("parties.address", "العنوان")}
                                     <input name="address" defaultValue={p.address ?? ""} />
                                   </label>
                                   <div className="form-actions">
                                     <button className="primary" type="submit">
-                                      حفظ التعديلات
+                                      {text("حفظ التعديلات", "Save changes")}
                                     </button>
                                   </div>
                                 </form>
@@ -517,10 +530,10 @@ export function PartiesTabsView({
                               <form action={deletePartyAction} className="inline-flex">
                                 <input type="hidden" name="id" value={p.id} />
                                 <ConfirmSubmitButton
-                                  confirmMessage={`هل أنت متأكد من رغبتك في حذف الحساب «${p.name}»؟`}
+                                  confirmMessage={`${text("هل أنت متأكد من رغبتك في حذف الحساب", "Are you sure you want to delete the account")} «${p.name}»?`}
                                   className="h-8 px-2.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 inline-flex items-center gap-1 text-xs font-bold shrink-0 cursor-pointer"
                                   title={t("common.delete", "حذف")}
-                                  ariaLabel={`حذف الحساب ${p.name}`}
+                                  ariaLabel={`${text("حذف الحساب", "Delete account")} ${p.name}`}
                                 >
                                   <Trash2 size={13} />
                                   <span>{t("common.delete", "حذف")}</span>
@@ -536,8 +549,8 @@ export function PartiesTabsView({
                   <tr>
                     <td colSpan={5} className="table-empty py-8 text-center text-slate-500 font-bold">
                       {searchTerm
-                        ? `لا توجد نتائج مطابقة للبحث عن «${searchTerm}».`
-                        : "لا توجد حسابات مسجلة في هذا القسم حالياً."}
+                        ? `${text("لا توجد نتائج مطابقة للبحث عن", "No accounts match")} «${searchTerm}».`
+                        : text("لا توجد حسابات مسجلة في هذا القسم حالياً.", "No accounts are currently recorded in this section.")}
                     </td>
                   </tr>
                 )}
@@ -648,15 +661,15 @@ export function PartiesTabsView({
                           </summary>
                           <form action={registerPaymentAction} className="inline-form">
                             <CloseDisclosureButton
-                              title={`تسجيل سند ${p.type === "customer" ? "قبض" : "صرف"} لـ: ${p.name}`}
+                              title={`${text("تسجيل سند", "Record")} ${p.type === "customer" ? text("قبض", "receipt") : text("صرف", "payment")} ${text("لـ:", "for")} ${p.name}`}
                             />
                             <input type="hidden" name="partyId" value={p.id} />
                             <label>
-                              المبلغ (ج.م)
+                              {text("المبلغ", "Amount")} ({currency})
                               <input name="amount" type="number" step="0.01" min="0.01" required />
                             </label>
                             <label>
-                              الصندوق / الخزينة
+                              {text("الصندوق / الخزينة", "Cashbox")}
                               <select name="cashboxId" required>
                                 {cashboxes.map((b) => (
                                   <option key={b.id} value={b.id}>
@@ -666,15 +679,15 @@ export function PartiesTabsView({
                               </select>
                             </label>
                             <label>
-                              البيان / ملاحظات السند
+                              {text("البيان / ملاحظات السند", "Description / payment notes")}
                               <input
                                 name="notes"
-                                defaultValue={p.type === "customer" ? "تحصيل دفعة حساب" : "سداد دفعة للمورد"}
+                                defaultValue={p.type === "customer" ? text("تحصيل دفعة حساب", "Customer account payment") : text("سداد دفعة للمورد", "Supplier payment")}
                               />
                             </label>
                             <div className="form-actions">
                               <button className="primary" type="submit">
-                                حفظ وترحيل السند
+                                {text("حفظ وترحيل السند", "Save and record payment")}
                               </button>
                             </div>
                           </form>
@@ -688,34 +701,34 @@ export function PartiesTabsView({
                             <span>{t("common.edit", "تعديل")}</span>
                           </summary>
                           <form action={savePartyAction} className="form-grid">
-                            <CloseDisclosureButton title={`تعديل بيانات الحساب: ${p.name}`} />
+                            <CloseDisclosureButton title={`${text("تعديل بيانات الحساب:", "Edit account details:")} ${p.name}`} />
                             <input type="hidden" name="id" value={p.id} />
                             <label>
-                              النوع
+                              {text("النوع", "Type")}
                               <select name="type" defaultValue={p.type}>
-                                <option value="customer">عميل</option>
-                                <option value="supplier">مورد</option>
+                                <option value="customer">{t("parties.customer", "عميل")}</option>
+                                <option value="supplier">{t("parties.supplier", "مورد")}</option>
                               </select>
                             </label>
                             <label>
-                              الاسم
+                              {text("الاسم", "Name")}
                               <input name="name" defaultValue={p.name} required />
                             </label>
                             <label>
-                              الهاتف
+                              {text("الهاتف", "Phone")}
                               <input name="phone" defaultValue={p.phone ?? ""} />
                             </label>
                             <label>
-                              البريد
+                              {text("البريد", "Email")}
                               <input name="email" type="email" defaultValue={p.email ?? ""} />
                             </label>
                             <label>
-                              العنوان
+                              {t("parties.address", "العنوان")}
                               <input name="address" defaultValue={p.address ?? ""} />
                             </label>
                             <div className="form-actions">
                               <button className="primary" type="submit">
-                                حفظ التعديلات
+                                {text("حفظ التعديلات", "Save changes")}
                               </button>
                             </div>
                           </form>
@@ -726,10 +739,10 @@ export function PartiesTabsView({
                         <form action={deletePartyAction} className="inline-flex">
                           <input type="hidden" name="id" value={p.id} />
                           <ConfirmSubmitButton
-                            confirmMessage={`هل أنت متأكد من رغبتك في حذف الحساب «${p.name}»؟`}
+                            confirmMessage={`${text("هل أنت متأكد من رغبتك في حذف الحساب", "Are you sure you want to delete the account")} «${p.name}»?`}
                             className="h-8 px-2.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 inline-flex items-center gap-1 text-xs font-bold cursor-pointer"
                             title={t("common.delete", "حذف")}
-                            ariaLabel={`حذف الحساب ${p.name}`}
+                            ariaLabel={`${text("حذف الحساب", "Delete account")} ${p.name}`}
                           >
                             <Trash2 size={12} />
                             <span>{t("common.delete", "حذف")}</span>
@@ -743,8 +756,8 @@ export function PartiesTabsView({
             ) : (
               <div className="p-6 text-center text-sm text-[var(--muted)] bg-[var(--panel)] border border-[var(--line)] rounded-xl">
                 {searchTerm
-                  ? `لا توجد نتائج مطابقة للبحث عن «${searchTerm}».`
-                  : "لا توجد حسابات مسجلة في هذا القسم حالياً."}
+                  ? `${text("لا توجد نتائج مطابقة للبحث عن", "No accounts match")} «${searchTerm}».`
+                  : text("لا توجد حسابات مسجلة في هذا القسم حالياً.", "No accounts are currently recorded in this section.")}
               </div>
             )}
           </div>
@@ -779,42 +792,42 @@ export function PartiesTabsView({
 
                 {/* Fast live search input to filter accounts dropdown */}
                 <div className="relative">
-                  <Search size={14} className="absolute right-2.5 top-2.5 text-[var(--muted)] pointer-events-none" />
+                  <Search size={14} className={`absolute ${isRtl ? "right-2.5" : "left-2.5"} top-2.5 text-[var(--muted)] pointer-events-none`} />
                   <input
                     type="text"
                     value={statementPartySearch}
                     onChange={(e) => setStatementPartySearch(e.target.value)}
-                    placeholder="ابحث بالاسم أو رقم الهاتف لفلترة القائمة..."
-                    className="w-full pr-8 pl-3 py-2 text-xs bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg font-bold"
+                    placeholder={text("ابحث بالاسم أو رقم الهاتف لفلترة القائمة...", "Search by name or phone to filter the list...")}
+                    className={`w-full ${isRtl ? "pr-8 pl-3" : "pl-8 pr-3"} py-2 text-xs bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg font-bold`}
                   />
                 </div>
 
                 <select name="partyId" defaultValue={selectedParty?.id ?? ""} required className="w-full font-bold">
                   <option value="" disabled>
-                    -- اختر عميلاً أو مورداً ({filteredStatementCustomers.length + filteredStatementSuppliers.length} حساب متاح) --
+                    {text("-- اختر عميلاً أو مورداً", "-- Select a customer or supplier")} ({filteredStatementCustomers.length + filteredStatementSuppliers.length} {text("حساب متاح", "accounts available")})
                   </option>
                   {selectedParty &&
                     !filteredStatementCustomers.some((c) => c.id === selectedParty.id) &&
                     !filteredStatementSuppliers.some((s) => s.id === selectedParty.id) && (
                       <option value={selectedParty.id}>
-                        {selectedParty.type === "customer" ? "عميل" : "مورد"}: {selectedParty.name}{" "}
+                        {selectedParty.type === "customer" ? t("parties.customer", "عميل") : t("parties.supplier", "مورد")}: {selectedParty.name}{" "}
                         {selectedParty.phone ? `(${selectedParty.phone})` : ""}
                       </option>
                     )}
                   {filteredStatementCustomers.length > 0 && (
-                    <optgroup label={`العملاء (${filteredStatementCustomers.length})`}>
+                    <optgroup label={`${t("parties.customers", "العملاء")} (${filteredStatementCustomers.length})`}>
                       {filteredStatementCustomers.map((c) => (
                         <option key={c.id} value={c.id}>
-                          عميل: {c.name} {c.phone ? `(${c.phone})` : ""}
+                          {t("parties.customer", "عميل")}: {c.name} {c.phone ? `(${c.phone})` : ""}
                         </option>
                       ))}
                     </optgroup>
                   )}
                   {filteredStatementSuppliers.length > 0 && (
-                    <optgroup label={`الموردون (${filteredStatementSuppliers.length})`}>
+                    <optgroup label={`${t("parties.suppliers", "الموردون")} (${filteredStatementSuppliers.length})`}>
                       {filteredStatementSuppliers.map((s) => (
                         <option key={s.id} value={s.id}>
-                          مورد: {s.name} {s.phone ? `(${s.phone})` : ""}
+                          {t("parties.supplier", "مورد")}: {s.name} {s.phone ? `(${s.phone})` : ""}
                         </option>
                       ))}
                     </optgroup>
@@ -859,27 +872,27 @@ export function PartiesTabsView({
                   {storeLogo && (
                     <img
                       src={storeLogo}
-                      alt={organization?.name ?? "متجر"}
+                      alt={organization?.name ?? text("متجر", "Store")}
                       className="w-12 h-12 rounded-lg object-contain border border-slate-200 p-0.5 shrink-0"
                     />
                   )}
                   <div>
                     <h2 className="text-xl font-black text-slate-900">
-                      كشف حساب: {selectedParty.name}
+                      {text("كشف حساب:", "Statement for:")} {selectedParty.name}
                     </h2>
                     <p className="text-xs text-slate-600 mt-1 font-semibold">
-                      النوع: {selectedParty.type === "customer" ? "عميل" : "مورد وشركة توريد"}
-                      {selectedParty.phone && ` · هاتف: ${selectedParty.phone}`}
-                      {selectedParty.address && ` · العنوان: ${selectedParty.address}`}
+                      {text("النوع:", "Type:")} {selectedParty.type === "customer" ? t("parties.customer", "عميل") : t("parties.supplier", "مورد وشركة توريد")}
+                      {selectedParty.phone && ` · ${text("هاتف:", "Phone:")} ${selectedParty.phone}`}
+                      {selectedParty.address && ` · ${text("العنوان:", "Address:")} ${selectedParty.address}`}
                     </p>
                   </div>
                 </div>
                 <div className="paper-meta text-left">
-                  <span className="text-xs text-slate-500 font-bold block">الفترة المستعرضة:</span>
+                  <span className="text-xs text-slate-500 font-bold block">{text("الفترة المستعرضة:", "Selected period:")}</span>
                   <strong className="text-xs font-black text-indigo-700 block">
                     {currentFrom || currentTo
-                      ? `من ${currentFrom || "البداية"} إلى ${currentTo || "اليوم"}`
-                      : "كامل السجل والمعاملات (شامل)"}
+                      ? text(`من ${currentFrom || "البداية"} إلى ${currentTo || "اليوم"}`, `From ${currentFrom || "beginning"} to ${currentTo || "today"}`)
+                      : text("كامل السجل والمعاملات (شامل)", "All records and transactions (inclusive)")}
                   </strong>
                 </div>
               </header>
@@ -887,19 +900,19 @@ export function PartiesTabsView({
               {/* Statement Row Search Bar */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 my-3 print-hide">
                 <div className="relative flex-1 max-w-sm">
-                  <Search size={14} className="absolute right-2.5 top-2.5 text-slate-400 pointer-events-none" />
+                  <Search size={14} className={`absolute ${isRtl ? "right-2.5" : "left-2.5"} top-2.5 text-slate-400 pointer-events-none`} />
                   <input
                     type="text"
                     value={statementRowSearch}
                     onChange={(e) => setStatementRowSearch(e.target.value)}
-                    placeholder="بحث في قيود الكشف (رقم الفاتورة، البيان، الملاحظات)..."
-                    className="w-full pr-8 pl-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg font-bold"
+                    placeholder={text("بحث في قيود الكشف (رقم الفاتورة، البيان، الملاحظات)...", "Search statement entries (invoice number, description, notes)...")}
+                    className={`w-full ${isRtl ? "pr-8 pl-3" : "pl-8 pr-3"} py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg font-bold`}
                   />
                 </div>
                 <div className="text-xs text-slate-600 font-bold">
-                  عدد القيود المعروضة: {displayStatementEntries.length}{" "}
+                  {text("عدد القيود المعروضة:", "Entries shown:")} {displayStatementEntries.length}{" "}
                   {displayStatementEntries.length !== statementEntries.length
-                    ? `(من إجمالي ${statementEntries.length})`
+                    ? text(`(من إجمالي ${statementEntries.length})`, `(of ${statementEntries.length} total)`)
                     : ""}
                 </div>
               </div>
@@ -921,7 +934,7 @@ export function PartiesTabsView({
                       displayStatementEntries.map((row) => {
                         const dateFormatted =
                           row.id === "opening"
-                            ? "رصيد افتتاحي"
+                            ? text("رصيد افتتاحي", "Opening balance")
                             : new Date(row.createdAt).toLocaleDateString("en-US", {
                                 year: "numeric",
                                 month: "short",
@@ -933,28 +946,28 @@ export function PartiesTabsView({
                             <td className="p-2 text-xs font-mono font-bold">{dateFormatted}</td>
                             <td className="p-2">
                               <span className="text-xs font-black text-slate-900">
-                                {ledgerKindLabel(row.kind)}
+                                {ledgerKindLabel(row.kind, locale)}
                               </span>
                             </td>
                             <td className="p-2 text-xs text-slate-600 font-semibold">{row.notes ?? "—"}</td>
                             <td className="p-2 text-center font-black text-rose-600 font-mono">
-                              {Number(row.debit) > 0 ? `${Number(row.debit).toLocaleString("en-US")} ج.م` : "—"}
+                              {Number(row.debit) > 0 ? `$                              {Number(row.debit).toLocaleString("en-US")} {text("ج.م", "EGP")}` : "—"}
                             </td>
                             <td className="p-2 text-center font-black text-emerald-700 font-mono">
-                              {Number(row.credit) > 0 ? `${Number(row.credit).toLocaleString("en-US")} ج.م` : "—"}
+                              {Number(row.credit) > 0 ? `$                              {Number(row.credit).toLocaleString("en-US")} {text("ج.م", "EGP")}` : "—"}
                             </td>
                             <td className="p-2 text-center font-black text-slate-900 font-mono">
-                              {Math.abs(row.balance).toLocaleString("en-US", { maximumFractionDigits: 2 })} ج.م
+                              {Math.abs(row.balance).toLocaleString("en-US", { maximumFractionDigits: 2 })} {text("ج.م", "EGP")}
                               <small className="block text-[10px] text-slate-500 font-bold">
                                 {row.balance > 0.005
                                   ? selectedParty.type === "customer"
-                                    ? "مدين (عليه)"
-                                    : "دائن (له)"
+                                    ? text("مدين (عليه)", "Debit (owed)")
+                                    : text("دائن (له)", "Credit (in favor)")
                                   : row.balance < -0.005
                                   ? selectedParty.type === "customer"
-                                    ? "دائن (له)"
-                                    : "مدين (عليه)"
-                                  : "متوازن"}
+                                    ? text("دائن (له)", "Credit (in favor)")
+                                    : text("مدين (عليه)", "Debit (owed)")
+                                  : text("متوازن", "Balanced")}
                               </small>
                             </td>
                           </tr>
@@ -963,7 +976,7 @@ export function PartiesTabsView({
                     ) : (
                       <tr>
                         <td colSpan={6} className="p-6 text-center text-slate-500 font-bold">
-                          لا توجد حركات مسجلة لهذا الحساب خلال الفترة المحددة.
+                          {text("لا توجد حركات مسجلة لهذا الحساب خلال الفترة المحددة.", "No transactions were recorded for this account during the selected period.")}
                         </td>
                       </tr>
                     )}
@@ -974,12 +987,12 @@ export function PartiesTabsView({
               {statementEntries.length > 0 && (
                 <div className="flex justify-end p-4 bg-slate-50 border border-slate-200 rounded-xl mt-4">
                   <div className="text-left">
-                    <span className="text-xs text-slate-500 font-bold block mb-1">صافي الرصيد الختامي:</span>
+                    <span className="text-xs text-slate-500 font-bold block mb-1">{text("صافي الرصيد الختامي:", "Closing balance:")}</span>
                     <b className="text-2xl font-black text-indigo-700 font-mono">
                       {Math.abs(statementEntries.at(-1)?.balance ?? 0).toLocaleString("en-US", {
                         maximumFractionDigits: 2,
                       })}{" "}
-                      ج.م
+                      {text("ج.م", "EGP")}
                     </b>
                   </div>
                 </div>
@@ -988,8 +1001,8 @@ export function PartiesTabsView({
           ) : (
             <div className="p-8 text-center bg-[var(--panel)] border border-[var(--line)] rounded-xl text-[var(--muted)] shadow-xs">
               <BookOpenText size={32} className="mx-auto mb-2 opacity-50 text-indigo-600" />
-              <p className="font-bold text-sm text-[var(--ink)]">يرجى اختيار عميل أو مورد من القائمة أعلاه</p>
-              <p className="text-xs mt-1">سيتم استعراض كشف الحساب التفصيلي مع الرصيد الجاري وإمكانية الطباعة فور الاختيار.</p>
+              <p className="font-bold text-sm text-[var(--ink)]">{text("يرجى اختيار عميل أو مورد من القائمة أعلاه", "Select a customer or supplier from the list above")}</p>
+              <p className="text-xs mt-1">{text("سيتم استعراض كشف الحساب التفصيلي مع الرصيد الجاري وإمكانية الطباعة فور الاختيار.", "The detailed statement, running balance, and print option will appear once selected.")}</p>
             </div>
           )}
         </div>
@@ -1204,10 +1217,10 @@ export function PartiesTabsView({
                           <tr key={row.id}>
                             <td className="text-[11px] font-mono font-bold">
                               {row.id === "opening"
-                                ? "افتتاحي"
+                                ? text("افتتاحي", "Opening")
                                 : new Date(row.createdAt).toLocaleDateString("en-US")}
                             </td>
-                            <td className="text-[11px] font-black">{ledgerKindLabel(row.kind)}</td>
+                            <td className="text-[11px] font-black">{ledgerKindLabel(row.kind, locale)}</td>
                             <td className="text-[11px] text-[var(--muted)] font-bold">{row.notes ?? "—"}</td>
                             <td className="text-center text-[11px] font-black text-rose-600 font-mono">
                               {Number(row.debit) > 0 ? Number(row.debit).toLocaleString("en-US") : "—"}
@@ -1228,10 +1241,10 @@ export function PartiesTabsView({
                 <div className="p-4 rounded-xl bg-indigo-50 border-2 border-indigo-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                   <div>
                     <b className="text-xs font-black text-indigo-900 block">
-                      هل ترغب في فحص قيود الفواتير وسندات القبض تفصيلياً؟
+                    {text("هل ترغب في فحص قيود الفواتير وسندات القبض تفصيلياً؟", "Would you like to review invoice and payment entries in detail?")}
                     </b>
                     <span className="text-[11px] text-indigo-700 font-bold">
-                      يمكنك فتح كشف الحساب المالي الكامل وتصديره أو طباعته بتقرير محاسبي رسمي.
+                    {text("يمكنك فتح كشف الحساب المالي الكامل وتصديره أو طباعته بتقرير محاسبي رسمي.", "Open the full financial statement to export or print an official accounting report.")}
                     </span>
                   </div>
                   <Link

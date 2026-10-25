@@ -94,6 +94,8 @@ export function InvoiceForm({
   initial?: InitialInvoice;
 }) {
   const { t, locale } = useI18n();
+  const text = (ar: string, en: string) => (locale === "en" ? en : ar);
+  const currency = locale === "en" ? "EGP" : "ج.م";
   const [type, setType] = useState<InvoiceType>(initial?.type ?? "sale");
   const [productId, setProductId] = useState(initial?.lines[0]?.productId ?? products[0]?.id ?? "");
   const [quantity, setQuantity] = useState("1");
@@ -255,10 +257,16 @@ export function InvoiceForm({
 
       if ((type === "sale" || type === "purchase_return") && existingPieces + factor > availablePieces) {
         setFormError(
-          `عفواً، لا يمكن إضافة «${found.name}» لأن رصيد المخزن (${availablePieces} قطعة) غير كافٍ للكمية المطلوبة.`
+          text(
+            `عفواً، لا يمكن إضافة «${found.name}» لأن رصيد المخزن (${availablePieces} قطعة) غير كافٍ للكمية المطلوبة.`,
+            `Cannot add "${found.name}": available stock (${availablePieces} pcs) is insufficient.`
+          )
         );
         setScanFeedback({
-          message: `رصيد المخزن غير كافٍ لـ «${found.name}» (المتاح: ${availablePieces} قطعة)`,
+          message: text(
+            `رصيد المخزن غير كافٍ لـ «${found.name}» (المتاح: ${availablePieces} قطعة)`,
+            `Insufficient stock for "${found.name}" (available: ${availablePieces} pcs).`
+          ),
           type: "error",
         });
         return;
@@ -293,12 +301,15 @@ export function InvoiceForm({
       setBarcodeQuery("");
       setLastUnregisteredBarcode(null);
       setFormError(null);
-      setScanFeedback({ message: `تمت إضافة «${found.name}» إلى الفاتورة بنجاح`, type: "success" });
+      setScanFeedback({
+        message: text(`تمت إضافة «${found.name}» إلى الفاتورة بنجاح`, `"${found.name}" was added to the invoice.`),
+        type: "success",
+      });
       setTimeout(() => setScanFeedback(null), 3500);
     } else {
       setLastUnregisteredBarcode(trimmed);
       setScanFeedback({
-        message: `الباركود «${trimmed}» غير مسجل في المخزن حالياً`,
+        message: text(`الباركود «${trimmed}» غير مسجل في المخزن حالياً`, `Barcode "${trimmed}" is not registered in inventory.`),
         type: "error",
       });
     }
@@ -309,13 +320,13 @@ export function InvoiceForm({
   // Add line to invoice with integer validation, stock validation, and price safety
   function addLine() {
     if (!selected) {
-      setFormError("يرجى اختيار صنف أولاً لإضافته إلى الفاتورة.");
+      setFormError(text("يرجى اختيار صنف أولاً لإضافته إلى الفاتورة.", "Select an item to add to the invoice."));
       return;
     }
 
     const qty = parseInt(quantity, 10);
     if (isNaN(qty) || qty <= 0) {
-      setFormError("الكمية يجب أن تكون عدداً صحيحاً موجباً (1 أو أكثر).");
+      setFormError(text("الكمية يجب أن تكون عدداً صحيحاً موجباً (1 أو أكثر).", "Quantity must be a positive whole number (1 or more)."));
       return;
     }
 
@@ -332,14 +343,20 @@ export function InvoiceForm({
 
     if (type === "sale" && totalRequiredPieces > availableStock) {
       setFormError(
-        `الكمية المطلوبة (${totalRequiredPieces} قطعة) تتجاوز الرصيد المتوفر في المخزن (${availableStock} قطعة) للصنف «${selected.name}».`
+        text(
+          `الكمية المطلوبة (${totalRequiredPieces} قطعة) تتجاوز الرصيد المتوفر في المخزن (${availableStock} قطعة) للصنف «${selected.name}».`,
+          `Requested quantity (${totalRequiredPieces} pcs) exceeds available stock (${availableStock} pcs) for "${selected.name}".`
+        )
       );
       return;
     }
 
     if (type === "purchase_return" && totalRequiredPieces > availableStock) {
       setFormError(
-        `لا يمكن عمل مرتجع مشتريات بكمية (${totalRequiredPieces} قطعة) تتجاوز المتوفر في المخزن (${availableStock} قطعة).`
+        text(
+          `لا يمكن عمل مرتجع مشتريات بكمية (${totalRequiredPieces} قطعة) تتجاوز المتوفر في المخزن (${availableStock} قطعة).`,
+          `Purchase return quantity (${totalRequiredPieces} pcs) exceeds available stock (${availableStock} pcs).`
+        )
       );
       return;
     }
@@ -370,7 +387,7 @@ export function InvoiceForm({
   const updateLineQuantity = (index: number, newQtyStr: string) => {
     const qty = parseInt(newQtyStr, 10);
     if (isNaN(qty) || qty <= 0) {
-      setFormError("الكمية يجب أن تكون عدداً صحيحاً موجباً (1 أو أكثر).");
+      setFormError(text("الكمية يجب أن تكون عدداً صحيحاً موجباً (1 أو أكثر).", "Quantity must be a positive whole number (1 or more)."));
       return;
     }
 
@@ -387,7 +404,10 @@ export function InvoiceForm({
 
     if ((type === "sale" || type === "purchase_return") && totalPieces > availableStock) {
       setFormError(
-        `الكمية المطلوبة (${totalPieces} قطعة) تتجاوز المتوفر في المخزن (${availableStock} قطعة) للصنف: ${target.name}`
+        text(
+          `الكمية المطلوبة (${totalPieces} قطعة) تتجاوز المتوفر في المخزن (${availableStock} قطعة) للصنف: ${target.name}`,
+          `Requested quantity (${totalPieces} pcs) exceeds available stock (${availableStock} pcs) for ${target.name}.`
+        )
       );
       return;
     }
@@ -407,12 +427,15 @@ export function InvoiceForm({
       // Selling price protection: Do not allow selling below unit cost or official unit price
       if (isNaN(newPrice) || newPrice < minAllowed - 0.005) {
         setFormError(
-          `ممنوع البيع بسعر أقل من سعر التكلفة/الحد الأدنى للوحدة (${formatAmount(minAllowed)} ج.م). لتطبيق تخفيض يرجى استخدام خانة الخصم الرسمية.`
+          text(
+            `ممنوع البيع بسعر أقل من سعر التكلفة/الحد الأدنى للوحدة (${formatAmount(minAllowed)} ج.م). لتطبيق تخفيض يرجى استخدام خانة الخصم الرسمية.`,
+            `Sale price cannot be below the unit cost (${formatAmount(minAllowed)} ${currency}). Apply discounts using the invoice discount field.`
+          )
         );
         return;
       }
     } else if (isNaN(newPrice) || newPrice < 0) {
-      setFormError("سعر الوحدة يجب أن يكون رقماً موجباً.");
+      setFormError(text("سعر الوحدة يجب أن يكون رقماً موجباً.", "Unit price must be a positive number."));
       return;
     }
 
@@ -428,7 +451,7 @@ export function InvoiceForm({
 
     // 1. Must have lines
     if (lines.length === 0) {
-      setFormError("لا يمكن حفظ فاتورة فارغة. يرجى إضافة صنف واحد على الأقل.");
+      setFormError(text("لا يمكن حفظ فاتورة فارغة. يرجى إضافة صنف واحد على الأقل.", "Cannot save an empty invoice. Add at least one item."));
       return;
     }
 
@@ -436,17 +459,20 @@ export function InvoiceForm({
     for (const line of lines) {
       const q = parseInt(line.quantity, 10);
       if (isNaN(q) || q <= 0) {
-        setFormError(`الكمية غير صالحة للصنف «${line.name}». يجب أن تكون 1 أو أكثر.`);
+        setFormError(text(`الكمية غير صالحة للصنف «${line.name}». يجب أن تكون 1 أو أكثر.`, `Invalid quantity for "${line.name}". It must be 1 or more.`));
         return;
       }
       const p = parseFloat(line.unitPrice);
       if (isNaN(p) || p < 0) {
-        setFormError(`سعر غير صالح للصنف «${line.name}».`);
+        setFormError(text(`سعر غير صالح للصنف «${line.name}».`, `Invalid price for "${line.name}".`));
         return;
       }
       if (type === "sale" && p < parseFloat(line.minPrice ?? "0") - 0.005) {
         setFormError(
-          `لا يمكن البيع بأقل من سعر التكلفة المعتمد للصنف «${line.name}» (${line.minPrice} ج.م).`
+          text(
+            `لا يمكن البيع بأقل من سعر التكلفة المعتمد للصنف «${line.name}» (${line.minPrice} ج.م).`,
+            `Cannot sell "${line.name}" below its recorded cost (${line.minPrice} ${currency}).`
+          )
         );
         return;
       }
@@ -465,7 +491,10 @@ export function InvoiceForm({
         const stock = Math.floor(Number(prod?.stock ?? 0));
         if (needed > stock) {
           setFormError(
-            `عفواً، الكمية الإجمالية المطلوبة للصنف «${prod?.name ?? pId}» (${needed} قطعة) تتجاوز رصيد المخزن المتاح (${stock} قطعة).`
+            text(
+              `عفواً، الكمية الإجمالية المطلوبة للصنف «${prod?.name ?? pId}» (${needed} قطعة) تتجاوز رصيد المخزن المتاح (${stock} قطعة).`,
+              `Total requested quantity for "${prod?.name ?? pId}" (${needed} pcs) exceeds available stock (${stock} pcs).`
+            )
           );
           return;
         }
@@ -476,27 +505,30 @@ export function InvoiceForm({
     const paidNum = parseNum(effectivePaid);
     if (paidNum < total && !partyId) {
       setFormError(
-        "لا يمكن البيع بالآجل أو تسجيل مديونية لعميل نقدي مجهول. يرجى اختيار عميل مسجل لترحيل المديونية لحسابه."
+        text(
+          "لا يمكن البيع بالآجل أو تسجيل مديونية لعميل نقدي مجهول. يرجى اختيار عميل مسجل لترحيل المديونية لحسابه.",
+          "Credit sales cannot be assigned to an anonymous walk-in customer. Select a registered customer to record the balance."
+        )
       );
       return;
     }
 
     // 5. Cashbox Requirement when paying cash
     if (paidNum > 0 && !cashboxId) {
-      setFormError("يرجى اختيار الصندوق / الخزينة عند تحصيل أو سداد مبالغ نقدية.");
+      setFormError(text("يرجى اختيار الصندوق / الخزينة عند تحصيل أو سداد مبالغ نقدية.", "Select a cashbox when receiving or paying cash."));
       return;
     }
 
     // 6. Paid cannot exceed final total
     if (paidNum > total) {
-      setFormError(`المبلغ المدفوع (${paidNum} ج.م) لا يمكن أن يتجاوز إجمالي الفاتورة الصافي (${total} ج.م).`);
+      setFormError(text(`المبلغ المدفوع (${paidNum} ج.م) لا يمكن أن يتجاوز إجمالي الفاتورة الصافي (${total} ج.م).`, `Payment (${paidNum} ${currency}) cannot exceed the invoice total (${total} ${currency}).`));
       return;
     }
 
     // 7. Discount cannot exceed subtotal
     const discountNum = discountAmount;
     if (discountNum > subtotal) {
-      setFormError("قيمة الخصم لا يمكن أن تتجاوز إجمالي الفاتورة قبل الخصم.");
+      setFormError(text("قيمة الخصم لا يمكن أن تتجاوز إجمالي الفاتورة قبل الخصم.", "Discount cannot exceed the invoice subtotal."));
       return;
     }
 
@@ -508,34 +540,34 @@ export function InvoiceForm({
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("INSUFFICIENT_STOCK")) {
         const item = msg.split(":")[1]?.trim() || "";
-        setFormError(`عفواً، الكمية المطلوبة غير متوفرة في رصيد المستودع للصنف: ${item}`);
+        setFormError(text(`عفواً، الكمية المطلوبة غير متوفرة في رصيد المستودع للصنف: ${item}`, `The requested quantity is not available in stock for: ${item}`));
       } else if (msg.includes("INVALID_INVOICE_LINES")) {
-        setFormError("تعذر قراءة أصناف الفاتورة. احذف الأصناف وأضفها مرة أخرى ثم حاول الحفظ.");
+        setFormError(text("تعذر قراءة أصناف الفاتورة. احذف الأصناف وأضفها مرة أخرى ثم حاول الحفظ.", "Could not read the invoice items. Remove and re-add them, then try again."));
       } else if (msg.includes("INVALID_INVOICE:")) {
-        setFormError(`بيانات الفاتورة غير مكتملة أو غير صالحة: ${msg.slice(msg.indexOf(":") + 1)}`);
+        setFormError(text(`بيانات الفاتورة غير مكتملة أو غير صالحة: ${msg.slice(msg.indexOf(":") + 1)}`, `Invoice details are incomplete or invalid: ${msg.slice(msg.indexOf(":") + 1)}`));
       } else if (msg.includes("PRODUCT_NOT_FOUND")) {
-        setFormError("أحد الأصناف لم يعد متاحاً أو تم إيقافه. حدّث الصفحة وأضف الصنف من جديد.");
+        setFormError(text("أحد الأصناف لم يعد متاحاً أو تم إيقافه. حدّث الصفحة وأضف الصنف من جديد.", "An item is no longer available or has been deactivated. Refresh and add it again."));
       } else if (msg.includes("PARTY_NOT_FOUND")) {
-        setFormError("العميل أو المورد المختار لم يعد متاحاً. اختر الطرف مرة أخرى.");
+        setFormError(text("العميل أو المورد المختار لم يعد متاحاً. اختر الطرف مرة أخرى.", "The selected customer or supplier is no longer available. Select them again."));
       } else if (msg.includes("CASHBOX_NOT_FOUND")) {
-        setFormError("الخزينة المختارة غير متاحة حالياً. اختر خزينة نشطة.");
+        setFormError(text("الخزينة المختارة غير متاحة حالياً. اختر خزينة نشطة.", "The selected cashbox is unavailable. Select an active cashbox."));
       } else if (msg.includes("INSUFFICIENT_CASHBOX_BALANCE")) {
-        setFormError("رصيد الخزينة غير كافٍ لإتمام عملية الصرف.");
+        setFormError(text("رصيد الخزينة غير كافٍ لإتمام عملية الصرف.", "The cashbox does not have enough funds to complete this payment."));
       } else if (msg.includes("ANONYMOUS_CREDIT_NOT_ALLOWED")) {
-        setFormError("لا يمكن تسجيل مديونية آجلة لعميل صالة مجهول. يرجى اختيار عميل مسجل.");
+        setFormError(text("لا يمكن تسجيل مديونية آجلة لعميل صالة مجهول. يرجى اختيار عميل مسجل.", "Credit cannot be assigned to an anonymous walk-in customer. Select a registered customer."));
       } else if (msg.includes("PRICE_BELOW_COST")) {
         const parts = msg.split(":");
         const name = parts[1] || "";
         const minCost = parts[2] || "";
-        setFormError(`ممنوع البيع بسعر أقل من سعر التكلفة المعتمد للصنف «${name}» (${minCost} ج.م).`);
+        setFormError(text(`ممنوع البيع بسعر أقل من سعر التكلفة المعتمد للصنف «${name}» (${minCost} ج.م).`, `Cannot sell "${name}" below its recorded cost (${minCost} ${currency}).`));
       } else if (msg.includes("AMOUNT_OUT_OF_RANGE")) {
-        setFormError("المبلغ المدفوع أو قيمة الخصم تتجاوز إجمالي الفاتورة المسموح به.");
+        setFormError(text("المبلغ المدفوع أو قيمة الخصم تتجاوز إجمالي الفاتورة المسموح به.", "Payment or discount exceeds the allowed invoice total."));
       } else if (msg.includes("CASHBOX_REQUIRED")) {
-        setFormError("يرجى اختيار الصندوق / الخزينة عند تحصيل أو سداد نقدية.");
+        setFormError(text("يرجى اختيار الصندوق / الخزينة عند تحصيل أو سداد نقدية.", "Select a cashbox when receiving or paying cash."));
       } else if (msg.includes("PARTY_TYPE_MISMATCH")) {
-        setFormError("نوع الطرف المختار لا يطابق نوع الفاتورة.");
+        setFormError(text("نوع الطرف المختار لا يطابق نوع الفاتورة.", "The selected account type does not match the invoice type."));
       } else {
-        setFormError(`تعذر حفظ الفاتورة: ${msg}`);
+        setFormError(text(`تعذر حفظ الفاتورة: ${msg}`, `Could not save invoice: ${msg}`));
       }
     }
   };
@@ -554,7 +586,7 @@ export function InvoiceForm({
         <>
           <input type="hidden" name="id" value={initial.id} />
           <input type="hidden" name="type" value={type} />
-          <CloseDisclosureButton title="تعديل بيانات الفاتورة" />
+          <CloseDisclosureButton title={text("تعديل بيانات الفاتورة", "Edit invoice details")} />
         </>
       )}
 
@@ -923,13 +955,13 @@ export function InvoiceForm({
                     <div>{line.name}</div>
                     {factor > 1 && (
                       <span className="text-[10px] text-indigo-700 font-bold block mt-0.5">
-                        عبوة: {line.unitName ?? "كرتونة"} ({factor} قطعة)
+                        {text("عبوة:", "Pack:")} {line.unitName ?? text("كرتونة", "Carton")} ({factor} {text("قطعة", "pcs")})
                       </span>
                     )}
                   </td>
                   <td className="text-center">
                     <select
-                      aria-label="الوحدة والتعبئة"
+                      aria-label={text("الوحدة والتعبئة", "Unit and packaging")}
                       className="table-input text-xs font-bold w-full max-w-[130px] mx-auto py-1 px-1.5 text-center"
                       value={line.unitId ?? ""}
                       onChange={(e) => {
@@ -950,7 +982,7 @@ export function InvoiceForm({
                               ? {
                                   ...item,
                                   unitId: newUnit?.id,
-                                  unitName: newUnit?.name ?? "قطعة",
+                                  unitName: newUnit?.name ?? text("قطعة", "Piece"),
                                   unitFactor: String(newFactor),
                                   unitPrice: newPrice,
                                   basePrice: String(baseP),
@@ -965,7 +997,7 @@ export function InvoiceForm({
                         const f = Math.round(Number(u.factor)) || 1;
                         return (
                           <option key={u.id} value={u.id}>
-                            {u.name} {f > 1 ? `(${f} ق)` : ""}
+                            {u.name} {f > 1 ? `(${f} ${text("قطعة", "pcs")})` : ""}
                           </option>
                         );
                       })}
@@ -981,12 +1013,12 @@ export function InvoiceForm({
                           if (cur > 1) updateLineQuantity(index, String(cur - 1));
                         }}
                         className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 flex items-center justify-center cursor-pointer font-bold"
-                        title="إنقاص الكمية بواحد"
+                        title={text("إنقاص الكمية بواحد", "Decrease quantity by one")}
                       >
                         <Minus size={11} />
                       </button>
                       <input
-                        aria-label="الكمية"
+                        aria-label={t("invoices.quantity", "الكمية")}
                         className="table-input w-14 text-center font-bold font-mono py-1"
                         type="number"
                         min="1"
@@ -1001,14 +1033,14 @@ export function InvoiceForm({
                           updateLineQuantity(index, String(cur + 1));
                         }}
                         className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 flex items-center justify-center cursor-pointer font-bold"
-                        title="زيادة الكمية بواحد"
+                        title={text("زيادة الكمية بواحد", "Increase quantity by one")}
                       >
                         <Plus size={11} />
                       </button>
                     </div>
                     {factor > 1 && (
                       <span className="block text-center text-[10px] text-[var(--muted)] font-mono font-bold mt-0.5">
-                        (= {totalPieces} قطعة)
+                        (= {totalPieces} {text("قطعة", "pcs")})
                       </span>
                     )}
                   </td>
@@ -1017,15 +1049,15 @@ export function InvoiceForm({
                       {type === "sale" ? (
                         <div className="inline-flex flex-col items-center">
                           <span className="font-mono font-bold text-sm text-[var(--ink)] px-2 py-1 bg-[var(--bg)] border border-[var(--line)] rounded-md">
-                            {formatAmount(line.unitPrice)} ج.م
+                            {formatAmount(line.unitPrice)} {currency}
                           </span>
                           <span className="text-[10px] text-emerald-700 font-bold mt-0.5">
-                            سعر الوحدة المعتمد
+                            {text("سعر الوحدة المعتمد", "Approved unit price")}
                           </span>
                         </div>
                       ) : (
                         <input
-                          aria-label="سعر الوحدة"
+                          aria-label={t("invoices.unitPrice", "سعر الوحدة")}
                           className="table-input w-24 text-center font-bold mx-auto font-mono"
                           type="number"
                           min="0.01"
@@ -1036,19 +1068,19 @@ export function InvoiceForm({
                       )}
                       {factor > 1 && (
                         <span className="block text-[10px] text-[var(--muted)] mt-0.5 font-mono">
-                          ({formatAmount(Number(line.unitPrice) / factor)} ج/قطعة)
+                          ({formatAmount(Number(line.unitPrice) / factor)} {text("ج/قطعة", "EGP/pc")})
                         </span>
                       )}
                     </div>
                   </td>
                   <td className="font-bold text-[var(--ink)] text-center font-mono text-sm">
-                    {formatAmount(lineTotal)} ج.م
+                    {formatAmount(lineTotal)} {currency}
                   </td>
                   <td className="text-center">
                     <button
                       className="danger-link p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
                       type="button"
-                      title="حذف هذا البند من الفاتورة"
+                      title={text("حذف هذا البند من الفاتورة", "Remove this invoice item")}
                       onClick={() => setLines((old) => old.filter((_, i) => i !== index))}
                     >
                       <Trash2 size={15} />
@@ -1089,14 +1121,14 @@ export function InvoiceForm({
                     </b>
                     {factor > 1 && (
                       <span className="text-[10px] text-indigo-700 font-bold block mt-0.5">
-                        عبوة: {line.unitName ?? "كرتونة"} ({factor} قطعة)
+                        {text("عبوة:", "Pack:")} {line.unitName ?? text("كرتونة", "Carton")} ({factor} {text("قطعة", "pcs")})
                       </span>
                     )}
                   </div>
                   <button
                     type="button"
                     className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg cursor-pointer shrink-0"
-                    title="حذف هذا البند"
+                    title={text("حذف هذا البند", "Remove this item")}
                     onClick={() => setLines((old) => old.filter((_, i) => i !== index))}
                   >
                     <Trash2 size={16} />
@@ -1107,10 +1139,10 @@ export function InvoiceForm({
                 <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[var(--line)]/60">
                   <div>
                     <label className="text-[10px] text-[var(--muted)] font-bold block mb-1">
-                      الوحدة / التعبئة:
+                      {text("الوحدة / التعبئة:", "Unit / packaging:")}
                     </label>
                     <select
-                      aria-label="الوحدة والتعبئة"
+                      aria-label={text("الوحدة والتعبئة", "Unit and packaging")}
                       className="w-full bg-[var(--bg)] border border-[var(--line-strong)] rounded-lg py-1.5 px-2 text-xs font-bold text-center"
                       value={line.unitId ?? ""}
                       onChange={(e) => {
@@ -1131,7 +1163,7 @@ export function InvoiceForm({
                               ? {
                                   ...item,
                                   unitId: newUnit?.id,
-                                  unitName: newUnit?.name ?? "قطعة",
+                                  unitName: newUnit?.name ?? text("قطعة", "Piece"),
                                   unitFactor: String(newFactor),
                                   unitPrice: newPrice,
                                   basePrice: String(baseP),
@@ -1146,7 +1178,7 @@ export function InvoiceForm({
                         const f = Math.round(Number(u.factor)) || 1;
                         return (
                           <option key={u.id} value={u.id}>
-                            {u.name} {f > 1 ? `(${f} ق)` : ""}
+                            {u.name} {f > 1 ? `(${f} ${text("قطعة", "pcs")})` : ""}
                           </option>
                         );
                       })}
@@ -1155,7 +1187,7 @@ export function InvoiceForm({
 
                   <div>
                     <label className="text-[10px] text-[var(--muted)] font-bold block mb-1 text-center">
-                      الكمية ({totalPieces} ق):
+                      {text("الكمية", "Quantity")} ({totalPieces} {text("ق", "pcs")}):
                     </label>
                     <div className="flex items-center justify-center rounded-lg border border-[var(--line-strong)] bg-[var(--bg)] overflow-hidden">
                       <button
@@ -1165,12 +1197,12 @@ export function InvoiceForm({
                           if (cur > 1) updateLineQuantity(index, String(cur - 1));
                         }}
                         className="w-8 h-8 flex items-center justify-center text-slate-600 hover:bg-slate-200 cursor-pointer font-bold"
-                        title="إنقاص الكمية"
+                        title={text("إنقاص الكمية", "Decrease quantity")}
                       >
                         <Minus size={13} />
                       </button>
                       <input
-                        aria-label="الكمية"
+                        aria-label={t("invoices.quantity", "الكمية")}
                         className="w-full text-center font-bold font-mono py-1 text-xs bg-transparent border-0"
                         type="number"
                         min="1"
@@ -1185,7 +1217,7 @@ export function InvoiceForm({
                           updateLineQuantity(index, String(cur + 1));
                         }}
                         className="w-8 h-8 flex items-center justify-center text-slate-600 hover:bg-slate-200 cursor-pointer font-bold"
-                        title="زيادة الكمية"
+                        title={text("زيادة الكمية", "Increase quantity")}
                       >
                         <Plus size={13} />
                       </button>
@@ -1196,15 +1228,15 @@ export function InvoiceForm({
                 {/* Price and Subtotal */}
                 <div className="flex items-center justify-between pt-2 border-t border-[var(--line)]/60 text-xs">
                   <div>
-                    <span className="text-[10px] text-[var(--muted)] block">سعر الوحدة:</span>
+                    <span className="text-[10px] text-[var(--muted)] block">{t("invoices.unitPrice", "سعر الوحدة")}:</span>
                     <span className="font-mono font-bold text-[var(--ink)]">
-                      {formatAmount(line.unitPrice)} ج.م
+                      {formatAmount(line.unitPrice)} {currency}
                     </span>
                   </div>
                   <div className="text-left">
-                    <span className="text-[10px] text-[var(--muted)] block">إجمالي البند:</span>
+                    <span className="text-[10px] text-[var(--muted)] block">{text("إجمالي البند:", "Line total:")}</span>
                     <b className="font-mono font-black text-sm text-indigo-700">
-                      {formatAmount(lineTotal)} ج.م
+                      {formatAmount(lineTotal)} {currency}
                     </b>
                   </div>
                 </div>

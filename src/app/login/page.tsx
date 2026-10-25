@@ -6,14 +6,15 @@ import { localLogoUrl } from "@/server/services/branding";
 import { getLocalNetworkUrl } from "@/server/network";
 import { NetworkShareDialog } from "@/components/network-share-dialog";
 import { LoginForm } from "@/features/auth/login-form";
+import { Locale } from "@/lib/i18n";
 
 export default async function Login({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
-  let organization: { name: string; logoPath: string | null } | undefined;
+  let organization: { name: string; logoPath: string | null; locale: string } | undefined;
 
   try {
     const [row] = await db
-      .select({ name: settings.organizationName, logoPath: settings.logoPath })
+      .select({ name: settings.organizationName, logoPath: settings.logoPath, locale: settings.locale })
       .from(settings)
       .limit(1);
     organization = row;
@@ -23,11 +24,12 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
 
   const logoUrl = localLogoUrl(organization?.logoPath);
   const { url: networkUrl } = getLocalNetworkUrl(3000);
+  const locale: Locale = organization?.locale === "en" ? "en" : "ar";
 
   return (
     <main className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-gradient-to-br from-slate-100 via-indigo-50/30 to-slate-200/60">
       <section
-        className="w-full max-w-[440px] bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-10 text-right transition-all"
+        className={`w-full max-w-[440px] bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-10 transition-all ${locale === "en" ? "text-left" : "text-right"}`}
         aria-labelledby="login-heading"
       >
         {/* Brand & Store Header */}
@@ -53,7 +55,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
           <NetworkShareDialog networkUrl={networkUrl} />
           <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
             <ShieldCheck size={14} className="text-emerald-600 shrink-0" />
-            <span>نظام محلي مشفر ومحمي • تخزين آمن للبيانات</span>
+            <span>{locale === "en" ? "Encrypted, protected local system • Secure data storage" : "نظام محلي مشفر ومحمي • تخزين آمن للبيانات"}</span>
           </div>
         </div>
       </section>

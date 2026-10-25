@@ -1,14 +1,16 @@
 "use client";
 
 import { Printer } from "lucide-react";
+import { useI18n } from "@/lib/i18n-client";
 
 export function PrintButton({
-  label = "طباعة",
+  label,
   thermal = false,
 }: {
   label?: string;
   thermal?: boolean;
 }) {
+  const { locale } = useI18n();
   return (
     <button
       className="secondary print-hide inline-flex items-center gap-1.5"
@@ -20,7 +22,7 @@ export function PrintButton({
       }}
     >
       <Printer size={15} />
-      <span>{label}</span>
+      <span>{label ?? (locale === "en" ? "Print" : "طباعة")}</span>
     </button>
   );
 }

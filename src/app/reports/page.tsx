@@ -43,6 +43,8 @@ export default async function ReportsPage({
   const locale = (settingsRow?.locale ?? "ar") as Locale;
   const isRtl = locale === "ar";
   const localeCode = "en-US";
+  const text = (ar: string, en: string) => (locale === "en" ? en : ar);
+  const currency = locale === "en" ? "EGP" : "ج.م";
 
   const range = await searchParams;
   
@@ -77,7 +79,7 @@ export default async function ReportsPage({
   ] = await Promise.all([
     db
       .select({
-        name: sql<string>`coalesce(${categories.name}, 'بدون تصنيف')`,
+        name: sql<string>`coalesce(${categories.name}, ${locale === "en" ? "Uncategorized" : "بدون تصنيف"})`,
         revenue: sql<string>`coalesce(sum(${invoiceLines.lineTotal}), 0)`,
         cost: sql<string>`coalesce(sum(${invoiceLines.quantity} * ${invoiceLines.costPrice}), 0)`,
         quantity: sql<string>`coalesce(sum(${invoiceLines.quantity}), 0)`,
@@ -280,96 +282,96 @@ export default async function ReportsPage({
         {/* Card 1: Sales */}
         <div className="p-3.5 bg-[var(--panel)] border border-[var(--line)] rounded-xl relative overflow-hidden shadow-2xs">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs text-[var(--muted)] font-bold">مبيعات الفترة</span>
+            <span className="text-xs text-[var(--muted)] font-bold">{text("مبيعات الفترة", "Period sales")}</span>
             <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
               <TrendingUp size={14} />
             </div>
           </div>
           <b className="text-xl text-indigo-700 dark:text-indigo-400 block font-bold">
-            {totalPeriodRevenue.toLocaleString("en-US")} <small className="text-[10px] text-[var(--muted)] font-normal">ج.م</small>
+            {totalPeriodRevenue.toLocaleString("en-US")} <small className="text-[10px] text-[var(--muted)] font-normal">{currency}</small>
           </b>
           <span className="text-[11px] text-[var(--muted)] font-medium">
-            {totalInvoicesCount.toLocaleString("en-US")} فاتورة بيع
+            {totalInvoicesCount.toLocaleString("en-US")} {text("فاتورة بيع", "sales invoices")}
           </span>
         </div>
 
         {/* Card 2: Gross Profit */}
         <div className="p-3.5 bg-[var(--panel)] border border-[var(--line)] rounded-xl relative overflow-hidden shadow-2xs">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs text-[var(--muted)] font-bold">مجمل الأرباح</span>
+            <span className="text-xs text-[var(--muted)] font-bold">{text("مجمل الأرباح", "Gross profit")}</span>
             <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
               <Coins size={14} />
             </div>
           </div>
           <b className="text-xl text-emerald-600 dark:text-emerald-400 block font-bold">
-            +{totalPeriodGrossProfit.toLocaleString("en-US")} <small className="text-[10px] text-[var(--muted)] font-normal">ج.م</small>
+            +{totalPeriodGrossProfit.toLocaleString("en-US")} <small className="text-[10px] text-[var(--muted)] font-normal">{currency}</small>
           </b>
           <span className="text-[11px] text-emerald-700 dark:text-emerald-500 font-semibold">
-            هامش ربح: %{overallMarginRate}
+            {text("هامش ربح:", "Profit margin:")} {overallMarginRate}%
           </span>
         </div>
 
         {/* Card 3: Purchases */}
         <div className="p-3.5 bg-[var(--panel)] border border-[var(--line)] rounded-xl relative overflow-hidden shadow-2xs">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs text-[var(--muted)] font-bold">المشتريات والتوريد</span>
+            <span className="text-xs text-[var(--muted)] font-bold">{text("المشتريات والتوريد", "Purchases and supplies")}</span>
             <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center">
               <ShoppingBag size={14} />
             </div>
           </div>
           <b className="text-xl text-purple-700 dark:text-purple-400 block font-bold">
-            {totalPeriodPurchases.toLocaleString("en-US")} <small className="text-[10px] text-[var(--muted)] font-normal">ج.م</small>
+            {totalPeriodPurchases.toLocaleString("en-US")} <small className="text-[10px] text-[var(--muted)] font-normal">{currency}</small>
           </b>
           <span className="text-[11px] text-[var(--muted)] font-medium">
-            {totalPurchasesCount.toLocaleString("en-US")} فاتورة توريد
+            {totalPurchasesCount.toLocaleString("en-US")} {text("فاتورة توريد", "purchase invoices")}
           </span>
         </div>
 
         {/* Card 4: Cash Collected */}
         <div className="p-3.5 bg-[var(--panel)] border border-[var(--line)] rounded-xl relative overflow-hidden shadow-2xs">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs text-[var(--muted)] font-bold">التحصيل (كاش)</span>
+            <span className="text-xs text-[var(--muted)] font-bold">{text("التحصيل (كاش)", "Cash collected")}</span>
             <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
               <CreditCard size={14} />
             </div>
           </div>
           <b className="text-xl text-[var(--ink)] block font-bold">
-            {totalPeriodPaid.toLocaleString("en-US")} <small className="text-[10px] text-[var(--muted)] font-normal">ج.م</small>
+            {totalPeriodPaid.toLocaleString("en-US")} <small className="text-[10px] text-[var(--muted)] font-normal">{currency}</small>
           </b>
           <span className="text-[11px] text-blue-700 dark:text-blue-400 font-medium">
-            معدل الكاش: %{cashCollectionRate}
+            {text("معدل التحصيل النقدي:", "Cash collection rate:")} {cashCollectionRate}%
           </span>
         </div>
 
         {/* Card 5: Credit / Deferred */}
         <div className="p-3.5 bg-[var(--panel)] border border-[var(--line)] rounded-xl relative overflow-hidden shadow-2xs">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs text-[var(--muted)] font-bold">الآجل على العملاء</span>
+            <span className="text-xs text-[var(--muted)] font-bold">{text("الآجل على العملاء", "Customer credit")}</span>
             <div className="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center">
               <Percent size={14} />
             </div>
           </div>
           <b className="text-xl text-rose-600 dark:text-rose-400 block font-bold">
-            {totalPeriodRemaining.toLocaleString("en-US")} <small className="text-[10px] text-[var(--muted)] font-normal">ج.م</small>
+            {totalPeriodRemaining.toLocaleString("en-US")} <small className="text-[10px] text-[var(--muted)] font-normal">{currency}</small>
           </b>
           <span className="text-[11px] text-rose-700 dark:text-rose-400 font-medium">
-            مديونيات جديدة بالفترة
+            {text("مديونيات جديدة بالفترة", "New receivables this period")}
           </span>
         </div>
 
         {/* Card 6: Business Working Capital */}
         <div className="p-3.5 bg-[var(--panel)] border border-[var(--line)] rounded-xl relative overflow-hidden shadow-2xs">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs text-[var(--muted)] font-bold">رأس مال المخزون</span>
+            <span className="text-xs text-[var(--muted)] font-bold">{text("رأس مال المخزون", "Inventory value")}</span>
             <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
               <Package size={14} />
             </div>
           </div>
           <b className="text-xl text-amber-700 dark:text-amber-400 block font-bold">
-            {inventoryWorkingCapital.toLocaleString("en-US")} <small className="text-[10px] text-[var(--muted)] font-normal">ج.م</small>
+            {inventoryWorkingCapital.toLocaleString("en-US")} <small className="text-[10px] text-[var(--muted)] font-normal">{currency}</small>
           </b>
           <span className="text-[11px] text-[var(--muted)] font-medium">
-            تكلفة بضاعة المستودع
+            {text("تكلفة بضاعة المستودع", "Inventory cost")}
           </span>
         </div>
       </div>
@@ -381,7 +383,7 @@ export default async function ReportsPage({
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-xs font-bold text-[var(--ink)] flex items-center gap-1.5">
               <PieChart size={15} className="text-indigo-600" />
-              <span>توزيع المبيعات (كاش نقدي vs آجل)</span>
+              <span>{text("توزيع المبيعات (كاش نقدي vs آجل)", "Sales distribution (cash vs credit)")}</span>
             </h4>
           </div>
 
@@ -412,20 +414,20 @@ export default async function ReportsPage({
               </svg>
               <div className="absolute text-center">
                 <span className="text-sm font-black text-indigo-700">%{cashCollectionRate}</span>
-                <span className="block text-[9px] text-[var(--muted)] font-semibold">نقداً</span>
+                <span className="block text-[9px] text-[var(--muted)] font-semibold">{text("نقداً", "Cash")}</span>
               </div>
             </div>
 
             <div className="space-y-1.5 text-xs font-bold">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 shrink-0" />
-                <span className="text-[var(--ink)]">نقدي فوري (كاش):</span>
-                <b className="text-indigo-700">{totalPeriodPaid.toLocaleString("en-US")} ج.م</b>
+                <span className="text-[var(--ink)]">{text("نقدي فوري (كاش):", "Cash collected:")}</span>
+                <b className="text-indigo-700">{totalPeriodPaid.toLocaleString("en-US")} {currency}</b>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-slate-300 shrink-0" />
-                <span className="text-[var(--muted)]">آجل على الحساب:</span>
-                <b className="text-rose-600">{totalPeriodRemaining.toLocaleString("en-US")} ج.م</b>
+                <span className="text-[var(--muted)]">{text("آجل على الحساب:", "Credit outstanding:")}</span>
+                <b className="text-rose-600">{totalPeriodRemaining.toLocaleString("en-US")} {currency}</b>
               </div>
             </div>
           </div>
@@ -436,15 +438,15 @@ export default async function ReportsPage({
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-xs font-bold text-[var(--ink)] flex items-center gap-1.5">
               <BarChart3 size={15} className="text-emerald-600" />
-              <span>مقارنة مؤشرات الفترة المالية</span>
+              <span>{text("مقارنة مؤشرات الفترة المالية", "Period financial comparison")}</span>
             </h4>
           </div>
 
           <div className="space-y-2 py-1">
             <div>
               <div className="flex justify-between text-xs font-bold mb-1">
-                <span>المبيعات:</span>
-                <span className="text-indigo-600">{totalPeriodRevenue.toLocaleString("en-US")} ج.م</span>
+                <span>{text("المبيعات:", "Sales:")}</span>
+                <span className="text-indigo-600">{totalPeriodRevenue.toLocaleString("en-US")} {currency}</span>
               </div>
               <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                 <div className="h-full bg-indigo-600 rounded-full" style={{ width: "100%" }} />
@@ -453,8 +455,8 @@ export default async function ReportsPage({
 
             <div>
               <div className="flex justify-between text-xs font-bold mb-1">
-                <span>المشتريات:</span>
-                <span className="text-purple-600">{totalPeriodPurchases.toLocaleString("en-US")} ج.م</span>
+                <span>{text("المشتريات:", "Purchases:")}</span>
+                <span className="text-purple-600">{totalPeriodPurchases.toLocaleString("en-US")} {currency}</span>
               </div>
               <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                 <div
@@ -468,8 +470,8 @@ export default async function ReportsPage({
 
             <div>
               <div className="flex justify-between text-xs font-bold mb-1">
-                <span>مجمل الأرباح:</span>
-                <span className="text-emerald-600">+{totalPeriodGrossProfit.toLocaleString("en-US")} ج.م</span>
+                <span>{text("مجمل الأرباح:", "Gross profit:")}</span>
+                <span className="text-emerald-600">+{totalPeriodGrossProfit.toLocaleString("en-US")} {currency}</span>
               </div>
               <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                 <div
@@ -488,22 +490,22 @@ export default async function ReportsPage({
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-xs font-bold text-[var(--ink)] flex items-center gap-1.5">
               <Package size={15} className="text-amber-600" />
-              <span>تفاصيل رأس المال وقيمة البضاعة</span>
+              <span>{text("تفاصيل رأس المال وقيمة البضاعة", "Inventory valuation details")}</span>
             </h4>
           </div>
 
           <div className="space-y-2 py-1 text-xs">
             <div className="flex justify-between items-center p-2 rounded-lg bg-[var(--bg)] border border-[var(--line)]">
-              <span className="font-semibold text-[var(--muted)]">رأس مال المخزون بالتكلفة:</span>
-              <b className="font-bold text-[var(--ink)]">{inventoryWorkingCapital.toLocaleString("en-US")} ج.م</b>
+              <span className="font-semibold text-[var(--muted)]">{text("رأس مال المخزون بالتكلفة:", "Inventory at cost:")}</span>
+              <b className="font-bold text-[var(--ink)]">{inventoryWorkingCapital.toLocaleString("en-US")} {currency}</b>
             </div>
             <div className="flex justify-between items-center p-2 rounded-lg bg-[var(--bg)] border border-[var(--line)]">
-              <span className="font-semibold text-[var(--muted)]">القيمة التقديرية بالبيع القطاعي:</span>
-              <b className="font-bold text-emerald-700">{inventoryRetailValuation.toLocaleString("en-US")} ج.م</b>
+              <span className="font-semibold text-[var(--muted)]">{text("القيمة التقديرية بالبيع القطاعي:", "Estimated retail value:")}</span>
+              <b className="font-bold text-emerald-700">{inventoryRetailValuation.toLocaleString("en-US")} {currency}</b>
             </div>
             <div className="flex justify-between items-center p-2 rounded-lg bg-[var(--bg)] border border-[var(--line)]">
-              <span className="font-semibold text-[var(--muted)]">إجمالي وحدات المخزن:</span>
-              <b className="font-bold text-indigo-700">{Number(invCapital.totalPieces).toLocaleString("en-US")} قطعة</b>
+              <span className="font-semibold text-[var(--muted)]">{text("إجمالي وحدات المخزن:", "Total stock units:")}</span>
+              <b className="font-bold text-indigo-700">{Number(invCapital.totalPieces).toLocaleString("en-US")} {text("قطعة", "pcs")}</b>
             </div>
           </div>
         </div>
@@ -517,8 +519,8 @@ export default async function ReportsPage({
             <div className="flex items-center gap-2">
               <Users size={16} className="text-indigo-600" />
               <div>
-                <h3 className="text-sm font-bold">أكثر العملاء نشاطاً ومبيعات</h3>
-                <p className="text-xs text-[var(--muted)]">ترتيب العملاء بحسب إجمالي حجم المشتريات خلال الفترة</p>
+                <h3 className="text-sm font-bold">{text("أكثر العملاء نشاطاً ومبيعات", "Top customers by sales")}</h3>
+                <p className="text-xs text-[var(--muted)]">{text("ترتيب العملاء بحسب إجمالي حجم المشتريات خلال الفترة", "Customers ranked by total purchases during the period")}</p>
               </div>
             </div>
           </div>
@@ -527,10 +529,10 @@ export default async function ReportsPage({
             <table>
               <thead>
                 <tr>
-                  <th>اسم العميل</th>
-                  <th>الهاتف</th>
-                  <th className="text-center">الفواتير</th>
-                  <th className="text-left">إجمالي المشتريات</th>
+                  <th>{text("اسم العميل", "Customer")}</th>
+                  <th>{text("الهاتف", "Phone")}</th>
+                  <th className="text-center">{text("الفواتير", "Invoices")}</th>
+                  <th className="text-left">{text("إجمالي المشتريات", "Total purchases")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -546,17 +548,17 @@ export default async function ReportsPage({
                         </span>
                       </td>
                       <td className="text-center text-xs font-bold text-[var(--muted)]">
-                        {c.invoicesCount} فاتورة
+                        {c.invoicesCount} {text("فاتورة", "invoices")}
                       </td>
                       <td className="text-left font-bold text-xs text-indigo-700">
-                        {Number(c.totalPurchased).toLocaleString("en-US")} ج.م
+                        {Number(c.totalPurchased).toLocaleString("en-US")} {currency}
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
                     <td colSpan={4} className="table-empty py-4">
-                      لا توجد مشتريات لعملاء مسجلين بالفترة المحددة.
+                      {text("لا توجد مشتريات لعملاء مسجلين بالفترة المحددة.", "No purchases from registered customers were recorded during this period.")}
                     </td>
                   </tr>
                 )}
@@ -571,8 +573,8 @@ export default async function ReportsPage({
             <div className="flex items-center gap-2">
               <Building2 size={16} className="text-purple-600" />
               <div>
-                <h3 className="text-sm font-bold">أبرز الموردين وشركات التوريد</h3>
-                <p className="text-xs text-[var(--muted)]">ترتيب الموردين بحسب إجمالي حجم التوريدات للمستودع</p>
+                <h3 className="text-sm font-bold">{text("أبرز الموردين وشركات التوريد", "Top suppliers")}</h3>
+                <p className="text-xs text-[var(--muted)]">{text("ترتيب الموردين بحسب إجمالي حجم التوريدات للمستودع", "Suppliers ranked by total warehouse deliveries")}</p>
               </div>
             </div>
           </div>
@@ -581,10 +583,10 @@ export default async function ReportsPage({
             <table>
               <thead>
                 <tr>
-                  <th>اسم المورد / الشركة</th>
-                  <th>الهاتف</th>
-                  <th className="text-center">أوامر التوريد</th>
-                  <th className="text-left">إجمالي التوريد</th>
+                  <th>{text("اسم المورد / الشركة", "Supplier / company")}</th>
+                  <th>{text("الهاتف", "Phone")}</th>
+                  <th className="text-center">{text("أوامر التوريد", "Purchase invoices")}</th>
+                  <th className="text-left">{text("إجمالي التوريد", "Total supplied")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -600,17 +602,17 @@ export default async function ReportsPage({
                         </span>
                       </td>
                       <td className="text-center text-xs font-bold text-[var(--muted)]">
-                        {s.invoicesCount} أمر توريد
+                        {s.invoicesCount} {text("أمر توريد", "invoices")}
                       </td>
                       <td className="text-left font-bold text-xs text-purple-700">
-                        {Number(s.totalSupplied).toLocaleString("en-US")} ج.م
+                        {Number(s.totalSupplied).toLocaleString("en-US")} {currency}
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
                     <td colSpan={4} className="table-empty py-4">
-                      لا توجد فواتير توريد مسجلة بالفترة المحددة.
+                      {text("لا توجد فواتير توريد مسجلة بالفترة المحددة.", "No purchase invoices were recorded during this period.")}
                     </td>
                   </tr>
                 )}
@@ -624,10 +626,10 @@ export default async function ReportsPage({
       <section className="panel mb-5">
         <div className="panel-title">
           <div>
-            <h3>المبيعات والربحية حسب القسم والتصنيف</h3>
-            <p>مقارنة القيمة الإجمالية، التكلفة، مجمل الأرباح، وحجم الوحدات لكل قسم</p>
+            <h3>{text("المبيعات والربحية حسب القسم والتصنيف", "Sales and profit by category")}</h3>
+            <p>{text("مقارنة القيمة الإجمالية، التكلفة، مجمل الأرباح، وحجم الوحدات لكل قسم", "Compare revenue, cost, gross profit, and quantity for each category")}</p>
           </div>
-          <span className="date-pill">{categoriesReport.length} أقسام محققة للمبيعات</span>
+          <span className="date-pill">{categoriesReport.length} {text("أقسام محققة للمبيعات", "categories with sales")}</span>
         </div>
 
         {categoriesReport.length ? (
@@ -646,14 +648,14 @@ export default async function ReportsPage({
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-[var(--ink)] text-sm">{item.name}</span>
                       <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
-                        مساهمة: %{contribution}
+                        {text("مساهمة:", "Share:")} {contribution}%
                       </span>
                     </div>
                     <div className="text-xs font-bold text-[var(--ink)] flex items-center gap-3">
-                      <span>المبيعات: {rev.toLocaleString("en-US")} ج.م</span>
-                      <span className="text-emerald-700">الربح: {profit.toLocaleString("en-US")} ج.م (%{margin})</span>
+                      <span>{text("المبيعات:", "Sales:")} {rev.toLocaleString("en-US")} {currency}</span>
+                      <span className="text-emerald-700">{text("الربح:", "Profit:")} {profit.toLocaleString("en-US")} {currency} ({margin}%)</span>
                       <span className="text-[var(--muted)] font-normal">
-                        ({Number(item.quantity).toLocaleString("en-US")} قطعة · {item.count} فاتورة)
+                        ({Number(item.quantity).toLocaleString("en-US")} {text("قطعة", "pcs")} · {item.count} {text("فاتورة", "invoices")})
                       </span>
                     </div>
                   </div>
@@ -669,8 +671,8 @@ export default async function ReportsPage({
             <div className="empty-icon">
               <Layers size={20} />
             </div>
-            <b>لا توجد مبيعات مسجلة في هذه الفترة</b>
-            <p className="text-xs text-[var(--muted)] mt-1">سجّل فواتير بيع أو وسّع نطاق التاريخ لعرض أداء الأقسام.</p>
+            <b>{text("لا توجد مبيعات مسجلة في هذه الفترة", "No sales were recorded during this period")}</b>
+            <p className="text-xs text-[var(--muted)] mt-1">{text("سجّل فواتير بيع أو وسّع نطاق التاريخ لعرض أداء الأقسام.", "Record sales invoices or expand the date range to view category performance.")}</p>
           </div>
         )}
       </section>
@@ -681,8 +683,8 @@ export default async function ReportsPage({
           <div className="flex items-center gap-2">
             <Flame size={18} className="text-amber-500" />
             <div>
-              <h3>أعلى 10 أصناف مبيعاً وتحقيقاً للأرباح</h3>
-              <p>تحليل تفصيلي للكميات، إجمالي الإيرادات، التكلفة، وصافي الربح المحقق لكل منتج</p>
+              <h3>{text("أعلى 10 أصناف مبيعاً وتحقيقاً للأرباح", "Top 10 products by sales and profit")}</h3>
+              <p>{text("تحليل تفصيلي للكميات، إجمالي الإيرادات، التكلفة، وصافي الربح المحقق لكل منتج", "Detailed quantities, revenue, cost, and net profit by product")}</p>
             </div>
           </div>
         </div>
@@ -692,12 +694,12 @@ export default async function ReportsPage({
             <thead>
               <tr>
                 <th className="w-12 text-center">#</th>
-                <th>اسم المنتج</th>
-                <th className="text-center">الكمية المباعة</th>
-                <th className="text-center">إجمالي المبيعات</th>
-                <th className="text-center">التكلفة التقديرية</th>
-                <th className="text-center">صافي الربح</th>
-                <th className="text-center">هامش الربح</th>
+                <th>{text("اسم المنتج", "Product")}</th>
+                <th className="text-center">{text("الكمية المباعة", "Quantity sold")}</th>
+                <th className="text-center">{text("إجمالي المبيعات", "Total sales")}</th>
+                <th className="text-center">{text("التكلفة التقديرية", "Estimated cost")}</th>
+                <th className="text-center">{text("صافي الربح", "Net profit")}</th>
+                <th className="text-center">{text("هامش الربح", "Profit margin")}</th>
               </tr>
             </thead>
             <tbody>
@@ -713,16 +715,16 @@ export default async function ReportsPage({
                       <td className="text-center font-bold text-[var(--muted)]">{index + 1}</td>
                       <td className="font-bold text-[var(--ink)]">{item.name}</td>
                       <td className="text-center font-semibold">
-                        {Number(item.quantity).toLocaleString("en-US")} قطعة
+                        {Number(item.quantity).toLocaleString("en-US")} {text("قطعة", "pcs")}
                       </td>
                       <td className="text-center font-bold text-indigo-700">
-                        {rev.toLocaleString("en-US")} ج.م
+                        {rev.toLocaleString("en-US")} {currency}
                       </td>
                       <td className="text-center font-medium text-slate-600">
-                        {cost.toLocaleString("en-US")} ج.م
+                        {cost.toLocaleString("en-US")} {currency}
                       </td>
                       <td className="text-center font-bold text-emerald-700">
-                        +{profit.toLocaleString("en-US")} ج.م
+                        +{profit.toLocaleString("en-US")} {currency}
                       </td>
                       <td className="text-center">
                         <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -735,7 +737,7 @@ export default async function ReportsPage({
               ) : (
                 <tr>
                   <td colSpan={7} className="table-empty">
-                    لا توجد بيانات حركة مبيعات مسجلة في هذه الفترة.
+                    {text("لا توجد بيانات حركة مبيعات مسجلة في هذه الفترة.", "No sales data was recorded during this period.")}
                   </td>
                 </tr>
               )}

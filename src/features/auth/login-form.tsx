@@ -3,8 +3,10 @@
 import { useState, useTransition } from "react";
 import { Eye, EyeOff, Loader2, Lock, User, AlertCircle } from "lucide-react";
 import { signIn } from "@/features/auth/actions";
+import { useI18n } from "@/lib/i18n-client";
 
 export function LoginForm({ error }: { error?: string }) {
+  const { locale, isRtl } = useI18n();
   const [showPassword, setShowPassword] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -23,17 +25,21 @@ export function LoginForm({ error }: { error?: string }) {
           <AlertCircle size={18} className="shrink-0 text-rose-600" />
           <span>
             {error === "permissions"
-              ? "هذا الحساب ليس لديه صلاحية لفتح أي صفحة. اطلب من مدير النظام تعيين صلاحيات لحسابك."
-              : "اسم المستخدم أو كلمة المرور غير صحيحة. يرجى المحاولة مرة أخرى."}
+              ? locale === "en"
+                ? "This account cannot access any pages. Ask an administrator to grant permissions."
+                : "هذا الحساب ليس لديه صلاحية لفتح أي صفحة. اطلب من مدير النظام تعيين صلاحيات لحسابك."
+              : locale === "en"
+                ? "Incorrect username or password. Please try again."
+                : "اسم المستخدم أو كلمة المرور غير صحيحة. يرجى المحاولة مرة أخرى."}
           </span>
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Username Field */}
-        <div className="text-right space-y-1.5">
+        <div className={`${isRtl ? "text-right" : "text-left"} space-y-1.5`}>
           <label htmlFor="login-username" className="block text-xs font-bold text-slate-700">
-            اسم المستخدم
+            {locale === "en" ? "Username" : "اسم المستخدم"}
           </label>
           <div className="relative flex items-center">
             <input
@@ -43,7 +49,7 @@ export function LoginForm({ error }: { error?: string }) {
               autoComplete="username"
               required
               disabled={isPending}
-              placeholder="اسم المستخدم"
+              placeholder={locale === "en" ? "Username" : "اسم المستخدم"}
               className="w-full h-11 ps-11 pe-4 border border-slate-300 rounded-xl bg-slate-50/50 text-slate-900 text-sm focus:outline-none focus:bg-white focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100/60 transition-all disabled:opacity-50"
             />
             <User size={18} className="absolute start-3.5 text-slate-400 pointer-events-none" />
@@ -51,9 +57,9 @@ export function LoginForm({ error }: { error?: string }) {
         </div>
 
         {/* Password Field with Visibility Toggle */}
-        <div className="text-right space-y-1.5">
+        <div className={`${isRtl ? "text-right" : "text-left"} space-y-1.5`}>
           <label htmlFor="login-password" className="block text-xs font-bold text-slate-700">
-            كلمة المرور
+            {locale === "en" ? "Password" : "كلمة المرور"}
           </label>
           <div className="relative flex items-center">
             <input
@@ -71,7 +77,7 @@ export function LoginForm({ error }: { error?: string }) {
               type="button"
               className="absolute end-2 p-2 text-slate-400 hover:text-slate-700 rounded-lg transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center cursor-pointer"
               onClick={() => setShowPassword((prev) => !prev)}
-              aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+              aria-label={showPassword ? locale === "en" ? "Hide password" : "إخفاء كلمة المرور" : locale === "en" ? "Show password" : "إظهار كلمة المرور"}
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
@@ -87,10 +93,10 @@ export function LoginForm({ error }: { error?: string }) {
           {isPending ? (
             <>
               <Loader2 size={18} className="animate-spin" />
-              <span>جاري التحقق والولوج...</span>
+              <span>{locale === "en" ? "Signing in..." : "جاري التحقق والولوج..."}</span>
             </>
           ) : (
-            <span>تسجيل الدخول للنظام</span>
+            <span>{locale === "en" ? "Sign in" : "تسجيل الدخول للنظام"}</span>
           )}
         </button>
       </form>

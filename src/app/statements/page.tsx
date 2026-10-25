@@ -5,9 +5,10 @@ import { ArrowRight, BookOpen, Filter } from "lucide-react";
 import { PrintButton } from "@/components/print-button";
 import { getSessionUserId } from "@/server/auth/session";
 import { db } from "@/server/db";
-import { parties, partyLedger } from "@/server/db/schema";
+import { parties, partyLedger, settings } from "@/server/db/schema";
 import { requirePermission } from "@/server/permissions";
 import { formatAmount } from "@/lib/number-format";
+import { Locale, translate } from "@/lib/i18n";
 
 export default async function StatementsPage({
   searchParams,
@@ -18,6 +19,18 @@ export default async function StatementsPage({
   await requirePermission("parties", "view");
 
   const query = await searchParams;
+  const [settingsRow] = await db.select({ locale: settings.locale }).from(settings).where(eq(settings.id, 1)).limit(1);
+  const locale = (settingsRow?.locale === "en" ? "en" : "ar") as Locale;
+  const text = (ar: string, en: string) => (locale === "en" ? en : ar);
+  const currency = locale === "en" ? "EGP" : "ج.م";
+  const kindLabel = (kind: string) =>
+    ({
+      sale: text("فاتورة بيع", "Sales invoice"),
+      purchase: text("فاتورة شراء", "Purchase invoice"),
+      sale_return: text("مرتجع مبيعات", "Sales return"),
+      purchase_return: text("مرتجع مشتريات", "Purchase return"),
+      payment: text("سند دفعة", "Payment"),
+    })[kind] ?? text("حركة", "Transaction");
   const accounts = await db
     .select({
       id: parties.id,
@@ -82,14 +95,14 @@ export default async function StatementsPage({
     <main className="main standalone">
       <header className="topbar print-hide">
         <div>
-          <p className="eyebrow">المحاسبة والتقارير المالية</p>
-          <h1>كشوف حسابات العملاء والموردين</h1>
+          <p className="eyebrow">{text("المحاسبة والتقارير المالية", "Accounting and financial reports")}</p>
+          <h1>{text("كشوف حسابات العملاء والموردين", "Customer and supplier statements")}</h1>
         </div>
         <div className="top-actions">
-          {party && <PrintButton label="طباعة الكشف المحدد" />}
+          {party && <PrintButton label={text("طباعة الكشف المحدد", "Print selected statement")} />}
           <Link className="secondary" href="/parties">
             <ArrowRight size={15} />
-            <span>العملاء والموردون</span>
+            <span>{translate("nav.parties", locale)}</span>
           </Link>
         </div>
       </header>
@@ -98,36 +111,36 @@ export default async function StatementsPage({
       <section className="panel print-hide">
         <div className="panel-title mb-3">
           <div>
-            <h3>تحديد الحساب والفترة</h3>
-            <p>اختر العميل أو المورد لعرض دفتر الحركات التفصيلي مع الرصيد الجاري</p>
+            <h3>{text("تحديد الحساب والفترة", "Select account and date range")}</h3>
+            <p>{text("اختر العميل أو المورد لعرض دفتر الحركات التفصيلي مع الرصيد الجاري", "Choose a customer or supplier to view the detailed transaction ledger and running balance")}</p>
           </div>
         </div>
 
         <form className="date-filter mb-0" method="get">
           <label className="min-w-[260px]">
-            <span>اختيار الحساب *</span>
+            <span>{text("اختيار الحساب *", "Select account *")}</span>
             <select name="partyId" defaultValue={party?.id ?? ""} required>
               <option value="" disabled>
-                -- اختر عميلًا أو موردًا من الدليل --
+                {text("-- اختر عميلًا أو موردًا من الدليل --", "-- Select a customer or supplier --")}
               </option>
               {accounts.map((account) => (
                 <option value={account.id} key={account.id}>
-                  {account.type === "customer" ? "عميل" : "مورد"} · {account.name}
+                  {account.type === "customer" ? text("عميل", "Customer") : text("مورد", "Supplier")} · {account.name}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            <span>من تاريخ</span>
+            <span>{text("من تاريخ", "From date")}</span>
             <input type="date" name="from" defaultValue={query.from ?? new Date().toISOString().slice(0, 10)} />
           </label>
           <label>
-            <span>إلى تاريخ</span>
+            <span>{text("إلى تاريخ", "To date")}</span>
             <input type="date" name="to" defaultValue={query.to ?? new Date().toISOString().slice(0, 10)} />
           </label>
           <button className="primary flex items-center gap-1.5 h-[36px]">
             <Filter size={14} />
-            <span>استعراض الكشف</span>
+            <span>{text("استعراض الكشف", "View statement")}</span>
           </button>
         </form>
       </section>
@@ -136,20 +149,20 @@ export default async function StatementsPage({
       <section className="panel statement-paper">
         <div className="paper-header">
           <div>
-            <h2>{party ? `كشف حساب: ${party.name}` : "كشف الحساب المالي"}</h2>
+            <h2>{party ? `${text("كشف حساب:", "Account statement:")} ${party.name}` : text("كشف الحساب المالي", "Financial statement")}</h2>
             <p className="text-xs text-[var(--muted)] mt-1">
               {party
                 ? party.type === "customer"
-                  ? "سجل حساب عميل — مبيعات ومسحوبات"
-                  : "سجل حساب مورد — توريدات ومستحقات"
-                : "يرجى اختيار حساب من القائمة أعلاه"}
+                  ? text("سجل حساب عميل — مبيعات ومسحوبات", "Customer account — sales and withdrawals")
+                  : text("سجل حساب مورد — توريدات ومستحقات", "Supplier account — purchases and payables")
+                : text("يرجى اختيار حساب من القائمة أعلاه", "Select an account above")}
             </p>
           </div>
           {party && (
             <div className="text-left">
-              <span className="text-xs text-[var(--muted)] block mb-1">الرصيد الختامي</span>
+              <span className="text-xs text-[var(--muted)] block mb-1">{text("الرصيد الختامي", "Closing balance")}</span>
               <strong className={`text-xl font-extrabold ${balance > 0 ? "text-indigo-700" : balance < 0 ? "text-rose-600" : "text-emerald-700"}`}>
-                {balance.toLocaleString("en-US", { maximumFractionDigits: 2 })} ج.م
+                {balance.toLocaleString("en-US", { maximumFractionDigits: 2 })} {currency}
               </strong>
             </div>
           )}
@@ -161,11 +174,11 @@ export default async function StatementsPage({
               <table>
                 <thead>
                   <tr>
-                    <th>التاريخ والوقت</th>
-                    <th>البيان والتفاصيل</th>
-                    <th className="text-center">مدين (+)</th>
-                    <th className="text-center">دائن (−)</th>
-                    <th className="text-center">الرصيد الجاري</th>
+                    <th>{text("التاريخ والوقت", "Date and time")}</th>
+                    <th>{text("البيان والتفاصيل", "Description")}</th>
+                    <th className="text-center">{text("مدين (+)", "Debit (+)")}</th>
+                    <th className="text-center">{text("دائن (−)", "Credit (−)")}</th>
+                    <th className="text-center">{text("الرصيد الجاري", "Running balance")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -173,38 +186,27 @@ export default async function StatementsPage({
                     <tr key={entry.id}>
                       <td className="text-xs text-[var(--muted)]">
                         {entry.createdAt.getTime() === 0
-                          ? "رصيد افتتاحي سابق"
+                          ? text("رصيد افتتاحي سابق", "Opening balance")
                           : new Date(entry.createdAt).toLocaleString("en-US")}
                       </td>
                       <td className="font-semibold text-[var(--ink)]">
-                        {entry.notes ??
-                          (entry.kind === "sale"
-                            ? "فاتورة بيع"
-                            : entry.kind === "purchase"
-                            ? "فاتورة شراء"
-                            : entry.kind === "sale_return"
-                            ? "مرتجع مبيعات"
-                            : entry.kind === "purchase_return"
-                            ? "مرتجع مشتريات"
-                            : entry.kind === "payment"
-                            ? "سند دفعة"
-                            : "حركة")}
+                        {entry.notes ?? kindLabel(entry.kind)}
                       </td>
                       <td className="text-center font-semibold">
-                        {Number(entry.debit) > 0 ? `${formatAmount(entry.debit)} ج.م` : "—"}
+                        {Number(entry.debit) > 0 ? `${formatAmount(entry.debit)} ${currency}` : "—"}
                       </td>
                       <td className="text-center font-semibold">
-                        {Number(entry.credit) > 0 ? `${formatAmount(entry.credit)} ج.م` : "—"}
+                        {Number(entry.credit) > 0 ? `${formatAmount(entry.credit)} ${currency}` : "—"}
                       </td>
                       <td className="text-center font-bold text-[var(--ink)]">
-                        {formatAmount(entry.balance)} ج.م
+                        {formatAmount(entry.balance)} {currency}
                       </td>
                     </tr>
                   ))}
                   {rows.length === 0 && (
                     <tr>
                       <td colSpan={5} className="table-empty">
-                        لا توجد حركات مالية مسجلة لهذا الحساب خلال الفترة المحددة.
+                        {text("لا توجد حركات مالية مسجلة لهذا الحساب خلال الفترة المحددة.", "No financial transactions were recorded for this account during the selected period.")}
                       </td>
                     </tr>
                   )}
@@ -220,39 +222,39 @@ export default async function StatementsPage({
                       <b className="text-xs font-bold text-[var(--ink)]">
                         {entry.notes ??
                           (entry.kind === "sale"
-                            ? "فاتورة بيع"
+                            ? text("فاتورة بيع", "Sales invoice")
                             : entry.kind === "purchase"
-                            ? "فاتورة شراء"
+                            ? text("فاتورة شراء", "Purchase invoice")
                             : entry.kind === "sale_return"
-                            ? "مرتجع مبيعات"
+                            ? text("مرتجع مبيعات", "Sales return")
                             : entry.kind === "purchase_return"
-                            ? "مرتجع مشتريات"
+                            ? text("مرتجع مشتريات", "Purchase return")
                             : entry.kind === "payment"
-                            ? "سند دفعة"
-                            : "حركة")}
+                            ? text("سند دفعة", "Payment")
+                            : text("حركة", "Transaction"))}
                       </b>
                       <span className="text-[11px] text-[var(--muted)] font-mono shrink-0">
                         {entry.createdAt.getTime() === 0
-                          ? "رصيد افتتاحي"
+                          ? text("رصيد افتتاحي", "Opening balance")
                           : new Date(entry.createdAt).toLocaleDateString("en-US")}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 py-1.5 px-2 bg-[var(--bg)] rounded-lg text-center border border-[var(--line)]">
                       <div>
-                        <span className="text-[10px] text-[var(--muted)] block">مدين (+)</span>
+                        <span className="text-[10px] text-[var(--muted)] block">{text("مدين (+)", "Debit (+)")}</span>
                         <b className="text-xs text-rose-600 font-mono">
                           {Number(entry.debit) > 0 ? `${formatAmount(entry.debit)}` : "—"}
                         </b>
                       </div>
                       <div>
-                        <span className="text-[10px] text-[var(--muted)] block">دائن (−)</span>
+                        <span className="text-[10px] text-[var(--muted)] block">{text("دائن (−)", "Credit (−)")}</span>
                         <b className="text-xs text-emerald-700 font-mono">
                           {Number(entry.credit) > 0 ? `${formatAmount(entry.credit)}` : "—"}
                         </b>
                       </div>
                       <div>
-                        <span className="text-[10px] text-[var(--muted)] block">الرصيد</span>
+                        <span className="text-[10px] text-[var(--muted)] block">{text("الرصيد", "Balance")}</span>
                         <b className="text-xs text-[var(--ink)] font-mono">
                           {formatAmount(entry.balance)}
                         </b>
@@ -262,7 +264,7 @@ export default async function StatementsPage({
                 ))
               ) : (
                 <div className="p-6 text-center text-sm text-[var(--muted)] bg-[var(--panel)] border border-[var(--line)] rounded-xl">
-                  لا توجد حركات مسجلة لهذا الحساب.
+                  {text("لا توجد حركات مسجلة لهذا الحساب.", "No transactions were recorded for this account.")}
                 </div>
               )}
             </div>
@@ -272,9 +274,9 @@ export default async function StatementsPage({
             <div className="empty-icon">
               <BookOpen size={20} />
             </div>
-            <b>اختر عميلًا أو موردًا من القائمة أعلاه</b>
+            <b>{text("اختر عميلًا أو موردًا من القائمة أعلاه", "Select a customer or supplier above")}</b>
             <p className="text-xs text-[var(--muted)] mt-1">
-              سيظهر لك كشف الحساب التراكمي مفصلًا بالحركات، مع إمكانية طباعة تقرير رسمي فوري.
+              {text("سيظهر لك كشف الحساب التراكمي مفصلًا بالحركات، مع إمكانية طباعة تقرير رسمي فوري.", "The running account statement will show detailed transactions and can be printed as an official report.")}
             </p>
           </div>
         )}

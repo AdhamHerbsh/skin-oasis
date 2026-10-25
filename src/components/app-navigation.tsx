@@ -129,7 +129,7 @@ export function AppNavigation({
           {networkUrl && (
             <NetworkShareDialog
               networkUrl={networkUrl}
-              buttonLabel="show QR"
+              buttonLabel={locale === "en" ? "Show QR" : "عرض QR"}
               className="p-1.5 h-8 w-8 !px-0 rounded-lg"
             />
           )}
@@ -298,7 +298,7 @@ export function AppNavigation({
       </aside>
 
       {/* Mobile Bottom Navigation Bar (< 1024px) for Instant Touch Workflow */}
-      <nav className="mobile-bottom-nav print-hide" aria-label="التنقل السفلي السريع">
+      <nav className="mobile-bottom-nav print-hide" aria-label={locale === "en" ? "Quick navigation" : "التنقل السفلي السريع"}>
         {mobileBottomItems.map(({ href, labelKey, defaultLabel, Icon, isPrimary }) => {
           const label = t(labelKey, defaultLabel);
           const isActive = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));

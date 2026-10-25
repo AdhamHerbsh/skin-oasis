@@ -22,6 +22,7 @@ import { requirePermission } from "@/server/permissions";
 import { InvoiceForm } from "@/features/invoices/invoice-form";
 import { InvoicePrintView } from "@/features/invoices/invoice-print-view";
 import { localLogoUrl } from "@/server/services/branding";
+import { Locale, translate } from "@/lib/i18n";
 
 export default async function InvoiceDetails({ params }: { params: Promise<{ id: string }> }) {
   const userId = await getSessionUserId();
@@ -112,6 +113,8 @@ export default async function InvoiceDetails({ params }: { params: Promise<{ id:
     invoiceCash.find((entry) => activeCashboxes.some((box) => box.id === entry.cashboxId))?.cashboxId ?? "";
   const invoiceLogo = localLogoUrl(row.org?.logoPath);
   const invoice = row.invoice;
+  const locale = (row.org?.locale === "en" ? "en" : "ar") as Locale;
+  const text = (ar: string, en: string) => (locale === "en" ? en : ar);
   const remaining = Math.max(0, Number(invoice.total) - Number(invoice.paid));
   const partyBalances = Object.fromEntries(ledgerBalances.map(({ partyId, balance }) => [partyId, Number(balance)]));
   if (invoice.partyId) {
@@ -124,15 +127,15 @@ export default async function InvoiceDetails({ params }: { params: Promise<{ id:
       {/* Top Header & Actions (Hidden on Print) */}
       <header className="topbar print-hide">
         <div>
-          <p className="eyebrow">معاينة الفاتورة والطباعة</p>
-          <h1>فاتورة {invoice.number}</h1>
+          <p className="eyebrow">{text("معاينة الفاتورة والطباعة", "Invoice preview and printing")}</p>
+          <h1>{text("فاتورة", "Invoice")} {invoice.number}</h1>
         </div>
         <div className="top-actions">
           {editGrant.length > 0 && (invoice.type === "sale" || invoice.type === "purchase") && (
             <details className="editor print-hide">
               <summary className="primary">
                 <Edit3 size={15} />
-                <span>تعديل الفاتورة</span>
+                <span>{text("تعديل الفاتورة", "Edit invoice")}</span>
               </summary>
               <InvoiceForm
                 products={productOptions}
@@ -169,7 +172,7 @@ export default async function InvoiceDetails({ params }: { params: Promise<{ id:
           )}
           <Link className="secondary" href="/invoices">
             <ArrowRight size={15} />
-            <span>سجل الفواتير</span>
+            <span>{translate("invoices.backToList", locale, "سجل الفواتير")}</span>
           </Link>
         </div>
       </header>
@@ -187,4 +190,3 @@ export default async function InvoiceDetails({ params }: { params: Promise<{ id:
     </main>
   );
 }
-

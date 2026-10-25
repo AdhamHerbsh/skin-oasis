@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Printer, Search, ShoppingCart, Truck, RotateCcw, ArrowDownLeft, X, Eye } from "lucide-react";
+import { Search, ShoppingCart, Truck, RotateCcw, ArrowDownLeft, X, Eye, Trash2 } from "lucide-react";
 import { useI18n } from "@/lib/i18n-client";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { removeInvoice } from "./actions";
 
 type InvoiceItem = {
   invoice: {
@@ -19,7 +21,7 @@ type InvoiceItem = {
   partyName: string | null;
 };
 
-export function InvoicesTableView({ rows }: { rows: InvoiceItem[] }) {
+export function InvoicesTableView({ rows, canDelete }: { rows: InvoiceItem[]; canDelete: boolean }) {
   const { t, locale } = useI18n();
   const [tab, setTab] = useState<"all" | "sale" | "purchase" | "sale_return" | "purchase_return">("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -272,14 +274,30 @@ export function InvoicesTableView({ rows }: { rows: InvoiceItem[] }) {
                       </span>
                     </td>
                     <td>
-                      <Link
-                        className="h-8 px-3 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 inline-flex items-center gap-1.5 text-xs font-bold shrink-0"
-                        href={`/invoices/${row.id}`}
-                        title={t("invoices.openPrint", "فتح وطباعة")}
-                      >
-                        <Eye size={13} />
-                        <span>{t("invoices.openPrint", "فتح وطباعة")}</span>
-                      </Link>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Link
+                          className="h-8 px-3 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 inline-flex items-center gap-1.5 text-xs font-bold shrink-0"
+                          href={`/invoices/${row.id}`}
+                          title={t("invoices.openPrint", "فتح وطباعة")}
+                        >
+                          <Eye size={13} />
+                          <span>{t("invoices.openPrint", "فتح وطباعة")}</span>
+                        </Link>
+                        {canDelete && (
+                          <form action={removeInvoice}>
+                            <input type="hidden" name="id" value={row.id} />
+                            <ConfirmSubmitButton
+                              className="h-8 px-2.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 inline-flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+                              title={t("invoices.delete", "Delete invoice")}
+                              ariaLabel={`${t("invoices.delete", "Delete invoice")} ${row.number}`}
+                              confirmMessage={`${t("invoices.confirmDelete", "Are you sure you want to delete invoice")} ${row.number}? ${t("invoices.deleteWarning", "Its stock and account effects will be reversed.")}`}
+                            >
+                              <Trash2 size={13} />
+                              <span>{t("invoices.delete", "Delete")}</span>
+                            </ConfirmSubmitButton>
+                          </form>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -345,7 +363,7 @@ export function InvoicesTableView({ rows }: { rows: InvoiceItem[] }) {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <span className="text-[11px] text-[var(--muted)] font-medium block">
-                      {row.type.includes("sale") ? "العميل:" : "المورد:"}
+                      {row.type.includes("sale") ? (locale === "en" ? "Customer:" : "العميل:") : (locale === "en" ? "Supplier:" : "المورد:")}
                     </span>
                     <b className="text-sm font-bold text-[var(--ink)] block">
                       {partyName ?? (row.type.includes("sale") ? t("invoices.walkInCustomer", "عميل نقدي") : t("invoices.walkInSupplier", "مورد نقدي"))}
@@ -364,19 +382,19 @@ export function InvoicesTableView({ rows }: { rows: InvoiceItem[] }) {
                 {/* Financial figures strip */}
                 <div className="grid grid-cols-3 gap-2 p-2.5 bg-[var(--surface-muted)]/70 rounded-xl text-center text-xs">
                   <div>
-                    <span className="text-[10px] text-[var(--muted)] block">الإجمالي</span>
+                    <span className="text-[10px] text-[var(--muted)] block">{locale === "en" ? "Total" : "الإجمالي"}</span>
                     <b className="font-mono font-black text-[var(--ink)] block">
                       {Number(row.total).toLocaleString(localeCode, { maximumFractionDigits: 1 })}
                     </b>
                   </div>
                   <div>
-                    <span className="text-[10px] text-[var(--muted)] block">المدفوع</span>
+                    <span className="text-[10px] text-[var(--muted)] block">{locale === "en" ? "Paid" : "المدفوع"}</span>
                     <b className="font-mono font-bold text-emerald-700 block">
                       {Number(row.paid).toLocaleString(localeCode, { maximumFractionDigits: 1 })}
                     </b>
                   </div>
                   <div>
-                    <span className="text-[10px] text-[var(--muted)] block">المتبقي</span>
+                    <span className="text-[10px] text-[var(--muted)] block">{locale === "en" ? "Remaining" : "المتبقي"}</span>
                     <b className={`font-mono font-bold block ${remaining > 0 ? "text-rose-600 font-black" : "text-emerald-700"}`}>
                       {remaining > 0 ? remaining.toLocaleString(localeCode, { maximumFractionDigits: 1 }) : "0"}
                     </b>
@@ -392,6 +410,20 @@ export function InvoicesTableView({ rows }: { rows: InvoiceItem[] }) {
                     <Eye size={14} />
                     <span>{t("invoices.openPrint", "فتح وتفاصيل الفاتورة وطباعتها")}</span>
                   </Link>
+                  {canDelete && (
+                    <form action={removeInvoice} className="mt-2">
+                      <input type="hidden" name="id" value={row.id} />
+                      <ConfirmSubmitButton
+                        className="w-full py-2 px-3 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center justify-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
+                        title={t("invoices.delete", "Delete invoice")}
+                        ariaLabel={`${t("invoices.delete", "Delete invoice")} ${row.number}`}
+                        confirmMessage={`${t("invoices.confirmDelete", "Are you sure you want to delete invoice")} ${row.number}? ${t("invoices.deleteWarning", "Its stock and account effects will be reversed.")}`}
+                      >
+                        <Trash2 size={14} />
+                        <span>{t("invoices.delete", "Delete invoice")}</span>
+                      </ConfirmSubmitButton>
+                    </form>
+                  )}
                 </div>
               </div>
             );
