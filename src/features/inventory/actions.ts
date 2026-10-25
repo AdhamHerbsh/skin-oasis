@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/server/db";
 import { categories, products, stockMovements, units } from "@/server/db/schema";
@@ -12,6 +12,7 @@ const productSchema = z.object({
   id: zOptionalUuid,
   name: z.string().trim().min(2).max(180),
   sku: z.string().trim().max(80).optional().or(z.literal("")),
+  skuAuto: z.enum(["on", "off"]).optional(),
   barcode: z.string().trim().max(100).optional().or(z.literal("")),
   categoryId: zOptionalUuid,
   unitId: zOptionalUuid,
@@ -37,14 +38,9 @@ export async function saveProduct(formData: FormData) {
     throw new Error(`INVALID_PRODUCT: ${JSON.stringify(parsed.error.flatten().fieldErrors)}`);
   }
   const input = parsed.data;
-  let finalSku = (input.sku || "").trim();
-  if (!finalSku) {
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    finalSku = `SKN-${Date.now().toString().slice(-4)}-${randomSuffix}`;
-  }
+  const finalSku = (input.sku || "").trim();
   const values = {
     name: input.name,
-    sku: finalSku,
     barcode: input.barcode || null,
     categoryId: input.categoryId || null,
     unitId: input.unitId || null,
@@ -54,21 +50,74 @@ export async function saveProduct(formData: FormData) {
     active: input.active !== "off",
   };
 
-  if (id) {
-    await db.update(products).set(values).where(and(eq(products.id, id), isNull(products.deletedAt)));
-  } else {
+  try {
     await db.transaction(async (tx) => {
-      const [product] = await tx.insert(products).values({ ...values, stock: String(input.stock) }).returning({ id: products.id });
-      if (input.stock > 0) {
-        await tx.insert(stockMovements).values({
-          productId: product.id,
-          type: "adjustment",
-          quantity: String(input.stock),
-          reason: "رصيد افتتاحي عند إنشاء المنتج",
-          userId,
-        });
+      if (input.categoryId) {
+        const [category] = await tx
+          .select({ id: categories.id })
+          .from(categories)
+          .where(and(eq(categories.id, input.categoryId), isNull(categories.deletedAt)))
+          .for("update")
+          .limit(1);
+        if (!category) throw new Error("CATEGORY_NOT_FOUND");
+      }
+      if (input.unitId) {
+        const [unit] = await tx
+          .select({ id: units.id })
+          .from(units)
+          .where(eq(units.id, input.unitId))
+          .for("update")
+          .limit(1);
+        if (!unit) throw new Error("UNIT_NOT_FOUND");
+      }
+
+      if (id) {
+        if (!finalSku) throw new Error("PRODUCT_SKU_REQUIRED");
+        const updated = await tx
+          .update(products)
+          .set({ ...values, sku: finalSku })
+          .where(and(eq(products.id, id), isNull(products.deletedAt)))
+          .returning({ id: products.id });
+        if (!updated.length) throw new Error("PRODUCT_NOT_FOUND");
+      } else {
+        let sku = finalSku;
+        if (input.skuAuto === "on" || !sku) {
+          await tx.execute(sql`select pg_advisory_xact_lock(hashtext('product_sku_generation'))`);
+          const existingSkus = await tx.select({ sku: products.sku }).from(products);
+          const maxSequence = existingSkus.reduce((max, row) => {
+            const match = row.sku.match(/^SKN-(\d+)$/i);
+            return match ? Math.max(max, Number(match[1])) : max;
+          }, 0);
+          sku = `SKN-${String(maxSequence + 1).padStart(3, "0")}`;
+        }
+
+        const [product] = await tx
+          .insert(products)
+          .values({ ...values, sku, stock: String(input.stock) })
+          .returning({ id: products.id });
+        if (input.stock > 0) {
+          await tx.insert(stockMovements).values({
+            productId: product.id,
+            type: "adjustment",
+            quantity: String(input.stock),
+            reason: "رصيد افتتاحي عند إنشاء المنتج",
+            userId,
+          });
+        }
       }
     });
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "23505" &&
+      "constraint" in error &&
+      error.constraint === "product_sku_uq"
+    ) {
+      throw new Error("PRODUCT_SKU_EXISTS");
+    }
+    throw error;
   }
   revalidatePath("/inventory");
   revalidatePath("/");
@@ -77,7 +126,12 @@ export async function saveProduct(formData: FormData) {
 export async function deleteProduct(formData: FormData) {
   await requirePermission("inventory", "delete");
   const id = zUuid.parse(formData.get("id"));
-  await db.update(products).set({ active: false, deletedAt: new Date() }).where(eq(products.id, id));
+  const deleted = await db
+    .update(products)
+    .set({ active: false, deletedAt: new Date() })
+    .where(and(eq(products.id, id), isNull(products.deletedAt)))
+    .returning({ id: products.id });
+  if (!deleted.length) throw new Error("PRODUCT_NOT_FOUND");
   revalidatePath("/inventory");
   revalidatePath("/");
 }
@@ -120,7 +174,17 @@ export async function updateCategory(formData: FormData) {
 export async function deleteCategory(formData: FormData) {
   await requirePermission("inventory", "delete");
   const id = zUuid.parse(formData.get("id"));
-  await db.update(categories).set({ deletedAt: new Date() }).where(eq(categories.id, id));
+  await db.transaction(async (tx) => {
+    const [category] = await tx
+      .select({ id: categories.id })
+      .from(categories)
+      .where(and(eq(categories.id, id), isNull(categories.deletedAt)))
+      .for("update")
+      .limit(1);
+    if (!category) throw new Error("CATEGORY_NOT_FOUND");
+    await tx.update(products).set({ categoryId: null }).where(eq(products.categoryId, id));
+    await tx.update(categories).set({ deletedAt: new Date() }).where(eq(categories.id, id));
+  });
   revalidatePath("/inventory");
 }
 
@@ -145,10 +209,10 @@ export async function deleteUnit(formData: FormData) {
   await requirePermission("inventory", "delete");
   const id = zUuid.parse(formData.get("id"));
   await db.transaction(async (tx) => {
+    const [unit] = await tx.select({ id: units.id }).from(units).where(eq(units.id, id)).for("update").limit(1);
+    if (!unit) throw new Error("UNIT_NOT_FOUND");
     await tx.update(products).set({ unitId: null }).where(eq(products.unitId, id));
-    await tx.delete(units).where(eq(units.id, id));
+    await tx.delete(units).where(eq(units.id, unit.id));
   });
   revalidatePath("/inventory");
 }
-
-

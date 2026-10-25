@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   Boxes,
   Edit,
@@ -108,9 +108,38 @@ export function InventoryTabsView({
   }, [skuCodes, initialBarcode]);
 
   const [skuInput, setSkuInput] = useState(suggestedSku);
+  const [skuAuto, setSkuAuto] = useState(true);
+  const [productError, setProductError] = useState<string | null>(null);
+  const [isCreatingProduct, setIsCreatingProduct] = useState(false);
   useEffect(() => {
     setSkuInput(suggestedSku);
   }, [suggestedSku]);
+
+  const handleProductSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setProductError(null);
+    setIsCreatingProduct(true);
+    const formData = new FormData(event.currentTarget);
+    try {
+      await saveProductAction(formData);
+    } catch (error) {
+      console.error("Failed to create product", error);
+      const message = error instanceof Error ? error.message : "";
+      setProductError(
+        message.includes("PRODUCT_SKU_EXISTS")
+          ? text("رمز الصنف مستخدم بالفعل. اختر رمزاً آخر.", "This SKU is already in use. Choose another SKU.")
+          : message.includes("CATEGORY_NOT_FOUND")
+            ? text("التصنيف المحدد لم يعد متاحاً. حدّث الصفحة واختر تصنيفاً آخر.", "The selected category is no longer available. Refresh and choose another category.")
+            : message.includes("UNIT_NOT_FOUND")
+              ? text("وحدة القياس المحددة لم تعد متاحة. حدّث الصفحة واختر وحدة أخرى.", "The selected unit is no longer available. Refresh and choose another unit.")
+          : message.includes("INVALID_PRODUCT")
+            ? text("بعض بيانات المنتج غير صالحة. راجع الحقول المطلوبة وحاول مرة أخرى.", "Some product details are invalid. Check the required fields and try again.")
+            : text("تعذر حفظ المنتج. تحقق من البيانات وحاول مرة أخرى.", "The product could not be saved. Check the details and try again.")
+      );
+    } finally {
+      setIsCreatingProduct(false);
+    }
+  };
 
   // Mappings
   const unitMap = useMemo(() => new Map(units.map((u) => [u.id, u])), [units]);
@@ -222,8 +251,14 @@ export function InventoryTabsView({
               <PackagePlus size={14} />
               <span>{t("inventory.addProduct")}</span>
             </summary>
-            <form action={saveProductAction} className="form-grid">
+            <form action={saveProductAction} onSubmit={handleProductSubmit} className="form-grid">
               <CloseDisclosureButton title={t("inventory.addProduct")} />
+              <input type="hidden" name="skuAuto" value={skuAuto ? "on" : "off"} />
+              {productError && (
+                <div className="wide-field p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold" role="alert">
+                  {productError}
+                </div>
+              )}
               {initialBarcode && (
                 <div className="wide-field p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs font-bold text-amber-800">
                   {t("inventory.barcodeScannedPrompt")}: «{initialBarcode}»
@@ -242,6 +277,7 @@ export function InventoryTabsView({
                       const rnd = Math.floor(100 + Math.random() * 900);
                       const nextNum = Number(suggestedSku.match(/\d+/)?.[0] ?? 1);
                       setSkuInput(`SKN-${String(nextNum).padStart(3, "0")}-${rnd}`);
+                      setSkuAuto(false);
                     }}
                     className="text-[11px] text-indigo-700 hover:underline font-bold inline-flex items-center gap-1 cursor-pointer"
                     title={t("inventory.generateSku")}
@@ -253,9 +289,11 @@ export function InventoryTabsView({
                 <input
                   name="sku"
                   value={skuInput}
-                  onChange={(e) => setSkuInput(e.target.value)}
+                  onChange={(e) => {
+                    setSkuInput(e.target.value);
+                    setSkuAuto(false);
+                  }}
                   placeholder="SKN-006"
-                  required
                   className="font-mono font-bold"
                 />
                 <span className="text-[10px] text-[var(--muted)]">{t("inventory.skuHint")}</span>
@@ -303,8 +341,8 @@ export function InventoryTabsView({
                 <input name="reorderLevel" type="number" min="0" step="1" defaultValue="5" />
               </label>
               <div className="form-actions">
-                <button className="primary" type="submit">
-                  {t("inventory.saveProduct")}
+                <button className="primary" type="submit" disabled={isCreatingProduct}>
+                  {isCreatingProduct ? text("جاري الحفظ...", "Saving...") : t("inventory.saveProduct")}
                 </button>
               </div>
             </form>
