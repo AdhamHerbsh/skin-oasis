@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   Boxes,
   CheckCircle2,
-  Download,
   FilePlus,
   FileText,
   Landmark,
@@ -41,6 +40,7 @@ import { requirePermission } from "@/server/permissions";
 import { cashboxBalance } from "@/server/services/ledger-math";
 import { localLogoUrl } from "@/server/services/branding";
 import { translate, Locale } from "@/lib/i18n";
+import { PwaInstallButton } from "@/components/pwa-install-button";
 
 export default async function Home() {
   const uid = await getSessionUserId();
@@ -316,10 +316,7 @@ export default async function Home() {
             <FilePlus size={16} />
             <span>{translate("dash.newInvoiceShortcut", locale, "فاتورة جديدة")}</span>
           </Link>
-          <a href="/api/download" download className="secondary flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg cursor-pointer">
-            <Download size={14} />
-            <span>{translate("dash.downloadApp", locale, "تحميل التطبيق")}</span>
-          </a>
+          <PwaInstallButton />
         </div>
       </header>
 
