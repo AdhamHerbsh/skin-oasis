@@ -28,19 +28,16 @@ export function PwaInstallButton() {
   const { locale } = useI18n();
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [appInstalled, setAppInstalled] = useState(false);
-  const [message, setMessage] = useState("");
   const isInstalled = useSyncExternalStore(subscribeToStandalone, isStandalone, () => false) || appInstalled;
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
       setInstallPrompt(event as InstallPromptEvent);
-      setMessage("");
     };
     const handleAppInstalled = () => {
       setInstallPrompt(null);
       setAppInstalled(true);
-      setMessage(locale === "ar" ? "تم تثبيت التطبيق." : "App installed.");
     };
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -49,17 +46,10 @@ export function PwaInstallButton() {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
       window.removeEventListener("appinstalled", handleAppInstalled);
     };
-  }, [locale]);
+  }, []);
 
   const handleInstall = async () => {
-    if (!installPrompt) {
-      setMessage(
-        locale === "ar"
-          ? "من قائمة المتصفح اختر «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية»."
-          : "Use the browser menu to choose Install app or Add to Home Screen."
-      );
-      return;
-    }
+    if (!installPrompt) return;
 
     try {
       const prompt = installPrompt;
@@ -68,14 +58,9 @@ export function PwaInstallButton() {
       const { outcome } = await prompt.userChoice;
       if (outcome === "accepted") {
         setAppInstalled(true);
-        setMessage(locale === "ar" ? "تم تثبيت التطبيق." : "App installed.");
       }
-    } catch {
-      setMessage(
-        locale === "ar"
-          ? "استخدم قائمة المتصفح لتثبيت التطبيق أو إضافته إلى الشاشة الرئيسية."
-          : "Use the browser menu to install the app or add it to your home screen."
-      );
+    } catch (error) {
+      console.error("Website installation failed:", error);
     }
   };
 
@@ -86,10 +71,9 @@ export function PwaInstallButton() {
         <span>
           {isInstalled
             ? locale === "ar" ? "تم التثبيت" : "Installed"
-            : locale === "ar" ? "تنزيل التطبيق" : "Download app"}
+            : locale === "ar" ? "تثبيت الموقع" : "Install website"}
         </span>
       </button>
-      {message && <span className="text-[10px] text-[var(--muted)] text-right" role="status">{message}</span>}
     </div>
   );
 }

@@ -954,10 +954,10 @@ export default async function Home() {
       </section>
 
       {/* Global Operational Footer */}
-      <footer className="mt-10 pt-4 border-t border-[var(--line)] flex items-center justify-between text-xs text-[var(--muted)]">
+      {/* <footer className="mt-10 pt-4 border-t border-[var(--line)] flex items-center justify-between text-xs text-[var(--muted)]">
         <span>{organizationName} · ERP Management System</span>
         <span className="font-mono text-[11px]">ERP v2.0 • Offline Local & Fast</span>
-      </footer>
+      </footer> */}
     </main>
   );
 }
