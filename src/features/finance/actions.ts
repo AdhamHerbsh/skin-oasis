@@ -4,9 +4,9 @@ import { revalidatePath } from "next/cache";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/server/db";
-import { cashTransactions, cashboxes, parties, partyLedger } from "@/server/db/schema";
+import { auditLogs, cashTransactions, cashboxes, parties, partyLedger } from "@/server/db/schema";
 import { requirePermission } from "@/server/permissions";
-import { cashboxBalance } from "@/server/services/ledger-math";
+import { cashboxBalance, cashboxBalanceAfterRemoving } from "@/server/services/ledger-math";
 import { zUuid } from "@/lib/validation";
 
 export async function createCashbox(formData: FormData) {
@@ -53,6 +53,102 @@ export async function addCashTransaction(formData: FormData) {
     await tx.insert(cashTransactions).values({ ...input, amount: input.amount.toFixed(2), userId });
   });
   revalidatePath("/finance"); revalidatePath("/");
+}
+
+export async function deleteCashTransaction(formData: FormData) {
+  const userId = await requirePermission("finance", "delete");
+  const id = zUuid.parse(formData.get("id"));
+
+  await db.transaction(async (tx) => {
+    const [transaction] = await tx
+      .select()
+      .from(cashTransactions)
+      .where(eq(cashTransactions.id, id))
+      .for("update")
+      .limit(1);
+    if (!transaction) throw new Error("CASH_TRANSACTION_NOT_FOUND");
+    if (
+      transaction.invoiceId ||
+      transaction.partyId ||
+      transaction.kind === "invoice_payment" ||
+      transaction.kind === "party_payment"
+    ) {
+      throw new Error("CASH_TRANSACTION_LINKED");
+    }
+    if (
+      (transaction.kind === "transfer_in" || transaction.kind === "transfer_out") &&
+      !transaction.transferId
+    ) {
+      throw new Error("CASH_TRANSFER_INCOMPLETE");
+    }
+
+    let transactionsToDelete = [transaction];
+    if (transaction.transferId) {
+      transactionsToDelete = await tx
+        .select()
+        .from(cashTransactions)
+        .where(eq(cashTransactions.transferId, transaction.transferId))
+        .for("update");
+
+      const hasOneOut = transactionsToDelete.filter((entry) => entry.kind === "transfer_out").length === 1;
+      const hasOneIn = transactionsToDelete.filter((entry) => entry.kind === "transfer_in").length === 1;
+      const amountsMatch = transactionsToDelete.every(
+        (entry) => Number(entry.amount) === Number(transaction.amount),
+      );
+      if (transactionsToDelete.length !== 2 || !hasOneOut || !hasOneIn || !amountsMatch) {
+        throw new Error("CASH_TRANSFER_INCOMPLETE");
+      }
+    }
+
+    const cashboxIds = [...new Set(transactionsToDelete.map((entry) => entry.cashboxId))].sort();
+    const lockedBoxes = await tx
+      .select()
+      .from(cashboxes)
+      .where(inArray(cashboxes.id, cashboxIds))
+      .orderBy(cashboxes.id)
+      .for("update");
+    if (lockedBoxes.length !== cashboxIds.length) throw new Error("CASHBOX_NOT_FOUND");
+
+    const history = await tx
+      .select({
+        id: cashTransactions.id,
+        cashboxId: cashTransactions.cashboxId,
+        kind: cashTransactions.kind,
+        amount: cashTransactions.amount,
+      })
+      .from(cashTransactions)
+      .where(inArray(cashTransactions.cashboxId, cashboxIds));
+    const removeIds = transactionsToDelete.map((entry) => entry.id);
+
+    for (const box of lockedBoxes) {
+      const boxHistory = history.filter((entry) => entry.cashboxId === box.id);
+      if (cashboxBalanceAfterRemoving(box.openingBalance, boxHistory, removeIds) < 0) {
+        throw new Error("CASH_TRANSACTION_DELETE_NEGATIVE_BALANCE");
+      }
+    }
+
+    await tx.delete(cashTransactions).where(inArray(cashTransactions.id, removeIds));
+    await tx.insert(auditLogs).values({
+      userId,
+      action: "delete",
+      entity: "cash_transaction",
+      entityId: transaction.id,
+      details: {
+        transactions: transactionsToDelete.map(({ id, cashboxId, kind, amount, category, notes }) => ({
+          id,
+          cashboxId,
+          kind,
+          amount,
+          category,
+          notes,
+        })),
+      },
+    });
+  });
+
+  revalidatePath("/finance");
+  revalidatePath("/reports");
+  revalidatePath("/");
 }
 
 export async function transferCash(formData: FormData) {

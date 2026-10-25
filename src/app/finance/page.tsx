@@ -5,9 +5,10 @@ import { ArrowLeftRight, ArrowRight, Banknote, Landmark, Plus, Receipt, Wallet, 
 import { getSessionUserId } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { cashTransactions, cashboxes, permissions, settings, users } from "@/server/db/schema";
-import { addCashTransaction, createCashbox, deactivateCashbox, transferCash, updateCashbox } from "@/features/finance/actions";
+import { addCashTransaction, createCashbox, deactivateCashbox, deleteCashTransaction, transferCash, updateCashbox } from "@/features/finance/actions";
 import { requirePermission } from "@/server/permissions";
 import { CloseDisclosureButton } from "@/components/close-disclosure-button";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 
 export default async function FinancePage() {
   const userId = await getSessionUserId();
@@ -58,6 +59,14 @@ export default async function FinancePage() {
   ]);
 
   const totals = new Map(aggregates.map((x) => [x.cashboxId, Number(x.balance)]));
+  const isTransactionLinked = (tx: (typeof txs)[number]) =>
+    Boolean(
+      tx.invoiceId ||
+        tx.partyId ||
+        tx.kind === "invoice_payment" ||
+        tx.kind === "party_payment" ||
+        ((tx.kind === "transfer_in" || tx.kind === "transfer_out") && !tx.transferId),
+    );
   const grandTotalCash = boxes.reduce(
     (sum, box) => sum + (Number(box.openingBalance) + (totals.get(box.id) ?? 0)),
     0
@@ -291,6 +300,7 @@ export default async function FinancePage() {
                 <th>{text("التصنيف", "Category")}</th>
                 <th>{text("المبلغ", "Amount")}</th>
                 <th>{text("ملاحظات", "Notes")}</th>
+                {canDelete && <th>{text("إجراء", "Action")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -321,12 +331,41 @@ export default async function FinancePage() {
                         {isPositive ? "+" : "−"} {Number(tx.amount).toLocaleString("en-US")} {currency}
                       </td>
                       <td className="text-xs text-[var(--muted)]">{tx.notes ?? "—"}</td>
+                      {canDelete && (
+                        <td>
+                          {isTransactionLinked(tx) ? (
+                            <span className="text-xs text-[var(--muted)]">
+                              {text("مرتبطة بمستند", "Linked to a record")}
+                            </span>
+                          ) : (
+                            <form action={deleteCashTransaction} className="inline-flex">
+                              <input type="hidden" name="id" value={tx.id} />
+                              <ConfirmSubmitButton
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700"
+                                confirmMessage={
+                                  tx.transferId
+                                    ? text(
+                                        "سيتم حذف طرفي هذا التحويل وتحديث أرصدة الخزنتين. هل تريد المتابعة؟",
+                                        "Both sides of this transfer will be deleted and both cashbox balances updated. Continue?",
+                                      )
+                                    : text(
+                                        "هل أنت متأكد من حذف هذه الحركة وتحديث رصيد الخزنة؟",
+                                        "Are you sure you want to delete this transaction and update the cashbox balance?",
+                                      )
+                                }
+                              >
+                                <Trash2 size={13} /> {text("حذف الحركة", "Delete transaction")}
+                              </ConfirmSubmitButton>
+                            </form>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
                 })
               ) : (
                 <tr>
-                  <td colSpan={6} className="table-empty">
+                  <td colSpan={canDelete ? 7 : 6} className="table-empty">
                     {text("لا توجد حركات مسجلة. أضف صندوقًا أو سجل عملية نقدية للبدء.", "No transactions recorded. Add a cashbox or record a cash transaction to get started.")}
                   </td>
                 </tr>
@@ -369,6 +408,33 @@ export default async function FinancePage() {
                       {isPositive ? "+" : "−"} {Number(tx.amount).toLocaleString("en-US")} {currency}
                     </b>
                   </div>
+                  {canDelete && (
+                    isTransactionLinked(tx) ? (
+                      <p className="text-xs text-[var(--muted)]">
+                        {text("مرتبطة بمستند ولا يمكن حذفها من الخزنة.", "Linked to a record; delete it from its source.")}
+                      </p>
+                    ) : (
+                      <form action={deleteCashTransaction} className="flex justify-end">
+                        <input type="hidden" name="id" value={tx.id} />
+                        <ConfirmSubmitButton
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700"
+                          confirmMessage={
+                            tx.transferId
+                              ? text(
+                                  "سيتم حذف طرفي هذا التحويل وتحديث أرصدة الخزنتين. هل تريد المتابعة؟",
+                                  "Both sides of this transfer will be deleted and both cashbox balances updated. Continue?",
+                                )
+                              : text(
+                                  "هل أنت متأكد من حذف هذه الحركة وتحديث رصيد الخزنة؟",
+                                  "Are you sure you want to delete this transaction and update the cashbox balance?",
+                                )
+                          }
+                        >
+                          <Trash2 size={13} /> {text("حذف الحركة", "Delete transaction")}
+                        </ConfirmSubmitButton>
+                      </form>
+                    )
+                  )}
                 </div>
               );
             })

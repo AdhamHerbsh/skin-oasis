@@ -7,6 +7,10 @@ import { useI18n } from "@/lib/i18n-client";
 
 const ERROR_TRANSLATIONS: Record<string, string> = {
   INSUFFICIENT_CASHBOX_BALANCE: "رصيد الصندوق/الخزينة المحددة غير كافٍ لإتمام هذه المعاملة النقدية.",
+  CASH_TRANSACTION_NOT_FOUND: "الحركة النقدية غير موجودة أو تم حذفها بالفعل.",
+  CASH_TRANSACTION_LINKED: "لا يمكن حذف هذه الحركة من دفتر الخزنة لأنها مرتبطة بفاتورة أو حساب عميل/مورد. احذفها أو عدّلها من المستند المرتبط.",
+  CASH_TRANSACTION_DELETE_NEGATIVE_BALANCE: "لا يمكن حذف الحركة لأن ذلك سيجعل رصيد إحدى الخزنات سالبًا.",
+  CASH_TRANSFER_INCOMPLETE: "تعذر حذف التحويل لأن طرفيه غير مكتملين أو لا يتطابق مبلغهما. راجع سجل الحركات.",
   INSUFFICIENT_STOCK: "الكمية المطلوبة في الفاتورة غير متوفرة في رصيد المخزن حالياً.",
   CASHBOX_OPENING_BALANCE_LOCKED: "لا يمكن تعديل الرصيد الافتتاحي للخزينة بعد تسجيل حركات نقدية وفواتير عليها لحماية القيود المحاسبية.",
   CASHBOX_NOT_FOUND: "الصندوق أو الخزينة المحددة غير موجودة أو تم إلغاء تنشيطها.",
@@ -33,6 +37,10 @@ const ERROR_TRANSLATIONS: Record<string, string> = {
 };
 const ERROR_TRANSLATIONS_EN: Record<string, string> = {
   INSUFFICIENT_CASHBOX_BALANCE: "The selected cashbox does not have enough balance for this transaction.",
+  CASH_TRANSACTION_NOT_FOUND: "The cash transaction could not be found or has already been deleted.",
+  CASH_TRANSACTION_LINKED: "This transaction is linked to an invoice or customer/supplier account. Delete or edit it from its source record.",
+  CASH_TRANSACTION_DELETE_NEGATIVE_BALANCE: "This transaction cannot be deleted because doing so would make a cashbox balance negative.",
+  CASH_TRANSFER_INCOMPLETE: "The transfer cannot be deleted because its two sides are missing or have different amounts. Review the cash ledger.",
   INSUFFICIENT_STOCK: "The requested invoice quantity is not available in stock.",
   CASHBOX_OPENING_BALANCE_LOCKED: "The opening balance cannot be changed after cash transactions or invoices have been recorded.",
   CASHBOX_NOT_FOUND: "The selected cashbox does not exist or is inactive.",

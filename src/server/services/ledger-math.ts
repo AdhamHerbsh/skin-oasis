@@ -9,6 +9,15 @@ export function cashboxBalance(opening: string | number, transactions: LedgerTra
   }, openingBalance);
 }
 
+export function cashboxBalanceAfterRemoving(
+  opening: string | number,
+  transactions: (LedgerTransaction & { id: string })[],
+  removedTransactionIds: string[],
+) {
+  const removedIds = new Set(removedTransactionIds);
+  return cashboxBalance(opening, transactions.filter((transaction) => !removedIds.has(transaction.id)));
+}
+
 export function partyBalance(
   openingOrEntries: string | number | LedgerEntry[],
   entriesOrOpening?: LedgerEntry[] | string | number,
