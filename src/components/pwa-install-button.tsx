@@ -34,6 +34,7 @@ export function PwaInstallButton() {
     const handleBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
       setInstallPrompt(event as InstallPromptEvent);
+      setAppInstalled(false);
     };
     const handleAppInstalled = () => {
       setInstallPrompt(null);

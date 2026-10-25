@@ -2,30 +2,23 @@ import type { MetadataRoute } from "next";
 import { eq } from "drizzle-orm";
 import { db } from "@/server/db";
 import { settings } from "@/server/db/schema";
-import { localLogoUrl } from "@/server/services/branding";
 
 export const dynamic = "force-dynamic";
 
 export default async function manifest(): Promise<MetadataRoute.Manifest> {
   const [brand] = await db
-    .select({ name: settings.organizationName, logo: settings.logoPath, locale: settings.locale })
+    .select({
+      name: settings.organizationName,
+      updatedAt: settings.updatedAt,
+      locale: settings.locale,
+    })
     .from(settings)
     .where(eq(settings.id, 1))
     .limit(1);
   const name = brand?.name ?? "Apex ERP";
   const shortName = name.slice(0, 12) || "Apex ERP";
-  const logo = localLogoUrl(brand?.logo) ?? "/pwa-icon.svg";
   const locale = brand?.locale === "en" ? "en" : "ar";
-
-  const extension = logo.split("?")[0].split(".").pop()?.toLowerCase();
-  const type =
-    extension === "png"
-      ? "image/png"
-      : extension === "jpg" || extension === "jpeg"
-        ? "image/jpeg"
-        : extension === "webp"
-          ? "image/webp"
-          : "image/svg+xml";
+  const logoVersion = brand?.updatedAt.getTime() ?? 0;
 
   return {
     name,
@@ -37,9 +30,8 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
     lang: locale,
     dir: locale === "ar" ? "rtl" : "ltr",
     icons: [
-      { src: "/pwa-icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: "/pwa-icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      { src: logo, sizes: "any", type, purpose: "any" },
+      { src: `/api/pwa-icon/192?v=${logoVersion}`, sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: `/api/pwa-icon/512?v=${logoVersion}`, sizes: "512x512", type: "image/png", purpose: "any" },
     ],
   };
 }
