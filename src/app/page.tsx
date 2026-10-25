@@ -88,6 +88,7 @@ export default async function Home() {
   let lowCount = 0;
   let totalCashBalance = 0;
   let todaySalesTotal = 0;
+  let todaySalesPaid = 0;
   let todaySalesCount = 0;
   let todayPurchasesTotal = 0;
   let todayPurchasesCount = 0;
@@ -141,6 +142,7 @@ export default async function Home() {
       db
         .select({
           total: sql<string>`coalesce(sum(${invoices.total}),0)`,
+          paid: sql<string>`coalesce(sum(${invoices.paid}),0)`,
           count: sql<number>`count(*)`,
         })
         .from(invoices)
@@ -219,6 +221,7 @@ export default async function Home() {
 
     lowCount = Number(lowRows[0]?.n ?? 0);
     todaySalesTotal = Number(todaySalesRows[0]?.total ?? 0);
+    todaySalesPaid = Number(todaySalesRows[0]?.paid ?? 0);
     todaySalesCount = Number(todaySalesRows[0]?.count ?? 0);
     todayPurchasesTotal = Number(todayPurchasesRows[0]?.total ?? 0);
     todayPurchasesCount = Number(todayPurchasesRows[0]?.count ?? 0);
@@ -277,6 +280,9 @@ export default async function Home() {
   }).format(new Date());
 
   const todayMarginRate = todaySalesTotal > 0 ? Math.round((todayProfitTotal / todaySalesTotal) * 100) : 0;
+  const todaySalesCredit = Math.max(0, todaySalesTotal - todaySalesPaid);
+  const todayCashRatio = todaySalesTotal > 0 ? Math.round((todaySalesPaid / todaySalesTotal) * 100) : 100;
+  const todayCreditRatio = todaySalesTotal > 0 ? Math.round((todaySalesCredit / todaySalesTotal) * 100) : 0;
   const totalAssetsAtCost = totalCashBalance + inventoryCostValuation + customerReceivablesTotal;
   const totalLiabilities = supplierPayablesTotal;
   const netLiquidationAtCost = totalAssetsAtCost - totalLiabilities;
@@ -564,70 +570,71 @@ export default async function Home() {
 
       {/* Visual Analytics & Operational Insights */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        {/* Card 1: Current liquidity in active cashboxes */}
+        {/* Card 1: Today Sales Payment Distribution (Cash vs Credit) */}
         <div className="p-5 bg-[var(--panel)] border border-[var(--line)] rounded-2xl space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-                <Wallet size={18} />
+                <Coins size={18} />
               </div>
               <div>
                 <h3 className="text-sm font-bold text-[var(--ink)]">
-                  {locale === "en" ? "Current Active Cashbox Liquidity" : "السيولة الحالية في الخزن النشطة"}
+                  {locale === "en" ? "Today's Revenue & Payment Split" : "توزيع تدفق مبيعات اليوم (نقدي وآجل)"}
                 </h3>
                 <p className="text-xs text-[var(--muted)]">
-                  {locale === "en" ? "Live balances after recorded cash movements" : "الأرصدة الفعلية بعد احتساب الحركات المالية المسجلة"}
+                  {locale === "en" ? "Cash collections vs outstanding market receivables" : "مقارنة السيولة النقدية المحصلة فوراً مقابل مبيعات الآجل بالسوق"}
                 </p>
               </div>
             </div>
-            <Link href="/finance" className="text-link text-xs">
-              <span>{locale === "en" ? "Manage cashboxes" : "إدارة الخزن"}</span>
-              <ArrowUpRight size={14} />
-            </Link>
-          </div>
-
-          <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-xl">
-            <span className="text-xs text-emerald-900 font-bold block mb-1">
-              {locale === "en" ? "Total current liquidity" : "إجمالي السيولة الحالية"}
-            </span>
-            <b className="text-2xl font-black text-emerald-800 font-mono block">
-              {totalCashBalance.toLocaleString(localeCode, { maximumFractionDigits: 2 })}{" "}
-              <small className="text-xs font-bold text-emerald-700/80">{translate("common.egp", locale, "ج.م")}</small>
-            </b>
-            <span className="text-xs text-emerald-700 font-semibold">
-              {locale === "en"
-                ? `${activeBoxesWithBalance.length} active cashboxes`
-                : `${activeBoxesWithBalance.length} خزائن نشطة`}
+            <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+              {locale === "en" ? `Margin: %${todayMarginRate}` : `هامش الربح: %${todayMarginRate}`}
             </span>
           </div>
 
-          <div className="max-h-52 space-y-2 overflow-y-auto">
-            {activeBoxesWithBalance.length ? (
-              activeBoxesWithBalance.map((box) => (
-                <div
-                  key={box.id}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[var(--panel)] px-3.5 py-2.5"
-                >
-                  <div className="min-w-0">
-                    <b className="block truncate text-sm text-[var(--ink)]">{box.name}</b>
-                    <span className="text-xs text-[var(--muted)]">
-                      {box.kind === "cash"
-                        ? locale === "en" ? "Cashbox" : "خزنة نقدية"
-                        : box.kind === "bank"
-                          ? locale === "en" ? "Bank account" : "حساب بنكي"
-                          : locale === "en" ? "E-wallet" : "محفظة إلكترونية"}
-                    </span>
-                  </div>
-                  <b className="shrink-0 font-mono text-sm font-bold text-emerald-700">
-                    {box.balance.toLocaleString(localeCode, { maximumFractionDigits: 2 })} {translate("common.egp", locale, "ج.م")}
-                  </b>
-                </div>
-              ))
-            ) : (
-              <p className="rounded-xl border border-dashed border-[var(--line-strong)] px-3.5 py-5 text-center text-sm font-semibold text-[var(--muted)]">
-                {locale === "en" ? "No active cashboxes. Current liquidity is zero." : "لا توجد خزائن نشطة، السيولة الحالية صفر."}
-              </p>
-            )}
+          {/* Visual Stacked Progress Bar */}
+          <div className="space-y-1.5">
+            <div className="h-3 rounded-full bg-slate-100 overflow-hidden flex">
+              <div
+                className="bg-emerald-500 h-full transition-all duration-500"
+                style={{ width: `${todayCashRatio}%` }}
+                title={locale === "en" ? `Cash: ${todayCashRatio}%` : `كاش: %${todayCashRatio}`}
+              />
+              <div
+                className="bg-indigo-500 h-full transition-all duration-500"
+                style={{ width: `${todayCreditRatio}%` }}
+                title={locale === "en" ? `Credit: ${todayCreditRatio}%` : `آجل: %${todayCreditRatio}`}
+              />
+            </div>
+            <div className="flex items-center justify-between text-xs text-[var(--muted)] font-medium">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                <span>{locale === "en" ? `Cash Collections (%${todayCashRatio})` : `تحصيل نقدي بالخزينة (%${todayCashRatio})`}</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+                <span>{locale === "en" ? `Credit / Receivables (%${todayCreditRatio})` : `مبيعات بالآجل للسوق (%${todayCreditRatio})`}</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Financial Breakdown Metric Strips (Enlarged & Themed) */}
+          <div className="grid grid-cols-2 gap-3.5 pt-1">
+            <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-xl">
+              <span className="text-xs text-emerald-900 font-bold block mb-1">
+                {locale === "en" ? "Cash Collected" : "المدفوع نقداً:"}
+              </span>
+              <b className="text-xl md:text-2xl font-black text-emerald-800 font-mono block">
+                {todaySalesPaid.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs font-bold text-emerald-700/80">{translate("common.egp", locale, "ج.م")}</small>
+              </b>
+            </div>
+            <div className="p-4 bg-indigo-50/80 border border-indigo-200 rounded-xl">
+              <span className="text-xs text-indigo-900 font-bold block mb-1">
+                {locale === "en" ? "Credit / Remaining" : "المتبقي آجل بالسوق:"}
+              </span>
+              <b className="text-xl md:text-2xl font-black text-indigo-800 font-mono block">
+                {todaySalesCredit.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs font-bold text-indigo-700/80">{translate("common.egp", locale, "ج.م")}</small>
+              </b>
+            </div>
           </div>
         </div>
 
