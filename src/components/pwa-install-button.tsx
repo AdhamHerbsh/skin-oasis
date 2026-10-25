@@ -86,7 +86,7 @@ export function PwaInstallButton() {
         <span>
           {isInstalled
             ? locale === "ar" ? "تم التثبيت" : "Installed"
-            : locale === "ar" ? "تنزيل التطبيق" : "Install app"}
+            : locale === "ar" ? "تنزيل التطبيق" : "Download app"}
         </span>
       </button>
       {message && <span className="text-[10px] text-[var(--muted)] text-right" role="status">{message}</span>}

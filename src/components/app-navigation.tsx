@@ -129,7 +129,7 @@ export function AppNavigation({
           {networkUrl && (
             <NetworkShareDialog
               networkUrl={networkUrl}
-              buttonLabel=""
+              buttonLabel="show QR"
               className="p-1.5 h-8 w-8 !px-0 rounded-lg"
             />
           )}
@@ -279,7 +279,7 @@ export function AppNavigation({
             <div className="w-full flex justify-center pb-1">
               <NetworkShareDialog
                 networkUrl={networkUrl}
-                buttonLabel={t("nav.networkShare", "ربط أجهزة الشبكة 🌐")}
+                buttonLabel="show QR"
                 className="w-full justify-center text-[11.5px]"
               />
             </div>

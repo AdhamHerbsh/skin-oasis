@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Check, Copy, Laptop, Smartphone, Wifi, X, QrCode } from "lucide-react";
+import { Smartphone, Wifi, X, QrCode } from "lucide-react";
 import QRCodeLib from "qrcode";
 
 interface NetworkShareDialogProps {
@@ -13,25 +13,23 @@ interface NetworkShareDialogProps {
 export function NetworkShareDialog({
   networkUrl,
   className = "",
-  buttonLabel = "فتح من جهاز آخر في الشبكة",
+  buttonLabel = "show QR",
 }: NetworkShareDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [displayUrl, setDisplayUrl] = useState(networkUrl);
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const { hostname, host, protocol } = window.location;
-      if (hostname && hostname !== "localhost" && hostname !== "127.0.0.1" && !hostname.startsWith("172.18.")) {
-        setDisplayUrl(`${protocol}//${host}`);
-      } else if (networkUrl && networkUrl.includes("172.18.")) {
-        setDisplayUrl("http://172.20.10.2:3000");
-      } else if (networkUrl) {
-        setDisplayUrl(networkUrl);
-      }
+  const handleOpen = () => {
+    const { hostname, host, protocol } = window.location;
+    if (hostname && hostname !== "localhost" && hostname !== "127.0.0.1" && !hostname.startsWith("172.18.")) {
+      setDisplayUrl(`${protocol}//${host}`);
+    } else if (networkUrl && networkUrl.includes("172.18.")) {
+      setDisplayUrl("http://172.20.10.2:3000");
+    } else if (networkUrl) {
+      setDisplayUrl(networkUrl);
     }
-  }, [networkUrl]);
+    setIsOpen(true);
+  };
 
   useEffect(() => {
     if (displayUrl) {
@@ -49,29 +47,14 @@ export function NetworkShareDialog({
     }
   }, [displayUrl]);
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(displayUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    } catch {
-      const input = document.getElementById("network-url-input") as HTMLInputElement;
-      if (input) {
-        input.select();
-        document.execCommand("copy");
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2500);
-      }
-    }
-  };
-
   return (
     <>
       <button
         type="button"
-        onClick={() => setIsOpen(true)}
+        onClick={handleOpen}
         className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer border border-[var(--line-strong)] hover:bg-[var(--bg)] hover:text-[var(--primary)] text-[var(--ink-secondary)] ${className}`}
-        title="مشاركة رابط السيستم مع أجهزة الكاشير أو التابلت على نفس الشبكة"
+        title="show QR"
+        aria-label="show QR"
       >
         <Wifi size={14} className="text-emerald-600" />
         <span>{buttonLabel}</span>
@@ -102,10 +85,10 @@ export function NetworkShareDialog({
               </div>
               <div>
                 <h3 className="font-bold text-base text-[var(--ink)]">
-                  فتح السيستم من أجهزة الشبكة
+                  فتح السيستم على جهاز آخر
                 </h3>
                 <p className="text-xs text-[var(--muted)]">
-                  كاشير إضافي • لابتوب المدير • تابلت وموبايل
+                  امسح رمز QR من الجهاز الآخر لفتح السيستم
                 </p>
               </div>
             </div>
@@ -129,58 +112,9 @@ export function NetworkShareDialog({
               </span>
             </div>
 
-            {/* Description */}
-            <p className="text-xs text-[var(--muted)] leading-relaxed mb-2.5">
-              أو افتح المتصفح وادخل الرابط المباشر للشبكة:
-            </p>
-
-            {/* Copy Box */}
-            <div className="flex items-center gap-2 p-1.5 bg-[var(--bg)] rounded-xl border border-[var(--line-strong)] mb-2">
-              <input
-                id="network-url-input"
-                type="text"
-                value={displayUrl}
-                onChange={(e) => setDisplayUrl(e.target.value)}
-                dir="ltr"
-                className="w-full bg-transparent px-3 py-1.5 text-xs font-mono font-bold text-emerald-700 outline-none"
-              />
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="primary text-xs py-1.5 px-3 shrink-0 rounded-lg font-bold"
-              >
-                {copied ? (
-                  <>
-                    <Check size={14} />
-                    <span>تم النسخ!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy size={14} />
-                    <span>نسخ</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            <p className="text-[11px] text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200 mb-4 font-medium">
-              💡 <strong>تنبيه للمتصفح:</strong> تأكد أن الرابط يبدأ بـ <span className="font-mono font-bold" dir="ltr">http://</span> وليس <span className="font-mono font-bold" dir="ltr">https://</span> لعدم وجود شهادة SSL محلية.
-            </p>
-
-            {/* Instructions */}
-            <div className="space-y-2 bg-[var(--bg)] rounded-xl p-3 border border-[var(--line)] text-xs mb-4">
-              <div className="flex items-start gap-2 text-[var(--ink-secondary)]">
-                <Smartphone size={15} className="text-indigo-600 shrink-0 mt-0.5" />
-                <span>
-                  <strong>الموبايل والتابلت:</strong> امسح الـ QR Code بكاميرا الهاتف أو الصق الرابط للتحكم الكامل.
-                </span>
-              </div>
-              <div className="flex items-start gap-2 text-[var(--ink-secondary)]">
-                <Laptop size={15} className="text-indigo-600 shrink-0 mt-0.5" />
-                <span>
-                  <strong>جهاز كاشير إضافي:</strong> افتح الرابط دون الحاجة لأي برامج إضافية.
-                </span>
-              </div>
+            <div className="flex items-center justify-center gap-2 text-xs text-[var(--ink-secondary)] mb-4">
+              <Smartphone size={15} className="text-indigo-600 shrink-0" />
+              <span>استخدم كاميرا الجهاز الآخر لمسح الرمز.</span>
             </div>
 
             {/* Bottom Button */}
