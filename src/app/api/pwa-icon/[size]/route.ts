@@ -57,11 +57,13 @@ export async function GET(
 
   const size = Number(requestedSize);
   const icon = await sharp(await getLogoBuffer())
+    .rotate()
+    .trim()
     .resize(size, size, {
       fit: "contain",
       background: { r: 255, g: 255, b: 255, alpha: 0 },
     })
-    .png()
+    .png({ compressionLevel: 9, adaptiveFiltering: true })
     .toBuffer();
 
   return new Response(new Uint8Array(icon), {

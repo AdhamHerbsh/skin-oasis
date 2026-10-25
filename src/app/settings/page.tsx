@@ -96,6 +96,14 @@ export default async function SettingsPage({
             {text("رقم هاتف المتجر (يظهر في الفواتير)", "Store phone number (shown on invoices)")}
             <input name="phone" type="tel" defaultValue={row?.phone ?? ""} maxLength={40} placeholder={text("مثال: 01012345678 أو +20 10 1234 5678", "e.g., 01012345678 or +20 10 1234 5678")} />
           </label>
+          <label>
+            {translate("settings.commercialRegistrationNumber", locale)}
+            <input name="commercialRegistrationNumber" defaultValue={row?.commercialRegistrationNumber ?? ""} maxLength={80} />
+          </label>
+          <label>
+            {translate("settings.taxNumber", locale)}
+            <input name="taxNumber" defaultValue={row?.taxNumber ?? ""} maxLength={80} />
+          </label>
           <input type="hidden" name="taxRate" value="0" />
           <label className="wide-field">
             {text("شعار المتجر (PNG / JPG / WebP • حتى 10MB)", "Store logo (PNG / JPG / WebP • up to 10 MB)")}

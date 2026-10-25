@@ -19,6 +19,8 @@ export async function saveSettings(formData: FormData) {
     locale: z.enum(["ar", "en"]).default("ar"),
     taxRate: z.coerce.number().finite().min(0).max(100),
     phone: z.string().trim().max(40).optional(),
+    commercialRegistrationNumber: z.string().trim().max(80).optional(),
+    taxNumber: z.string().trim().max(80).optional(),
     invoiceFooter: z.string().trim().max(2000).optional(),
   }).parse(Object.fromEntries(formData));
   const file = formData.get("logo");
@@ -71,6 +73,8 @@ export async function saveSettings(formData: FormData) {
     locale: input.locale,
     taxRate: input.taxRate.toFixed(4),
     phone: input.phone || null,
+    commercialRegistrationNumber: input.commercialRegistrationNumber || null,
+    taxNumber: input.taxNumber || null,
     invoiceFooter: input.invoiceFooter || null,
     ...(logoPath ? { logoPath } : {}),
   };

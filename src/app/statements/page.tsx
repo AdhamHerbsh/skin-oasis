@@ -5,10 +5,12 @@ import { ArrowRight, BookOpen, Filter } from "lucide-react";
 import { PrintButton } from "@/components/print-button";
 import { getSessionUserId } from "@/server/auth/session";
 import { db } from "@/server/db";
-import { parties, partyLedger, settings } from "@/server/db/schema";
+import { invoices, parties, partyLedger, settings } from "@/server/db/schema";
 import { requirePermission } from "@/server/permissions";
 import { formatAmount } from "@/lib/number-format";
 import { Locale, translate } from "@/lib/i18n";
+import { partyLedgerDescription, partyLedgerKindLabel } from "@/lib/party-ledger-labels";
+import { ledgerAmount, partyLedgerBalanceDelta } from "@/server/services/ledger-math";
 
 export default async function StatementsPage({
   searchParams,
@@ -23,14 +25,6 @@ export default async function StatementsPage({
   const locale = (settingsRow?.locale === "en" ? "en" : "ar") as Locale;
   const text = (ar: string, en: string) => (locale === "en" ? en : ar);
   const currency = locale === "en" ? "EGP" : "ج.م";
-  const kindLabel = (kind: string) =>
-    ({
-      sale: text("فاتورة بيع", "Sales invoice"),
-      purchase: text("فاتورة شراء", "Purchase invoice"),
-      sale_return: text("مرتجع مبيعات", "Sales return"),
-      purchase_return: text("مرتجع مشتريات", "Purchase return"),
-      payment: text("سند دفعة", "Payment"),
-    })[kind] ?? text("حركة", "Transaction");
   const accounts = await db
     .select({
       id: parties.id,
@@ -51,6 +45,14 @@ export default async function StatementsPage({
         .where(eq(partyLedger.partyId, party.id))
         .orderBy(asc(partyLedger.createdAt), asc(partyLedger.id))
     : [];
+  const linkedInvoices = party
+    ? await db.select({ id: invoices.id, number: invoices.number }).from(invoices).where(eq(invoices.partyId, party.id))
+    : [];
+  const invoiceNumbers = new Map(linkedInvoices.map((invoice) => [invoice.id, invoice.number]));
+  const transactionDescription = (entry: { kind: string; invoiceId: string | null; notes: string | null }) => {
+    const invoiceNumber = entry.invoiceId ? invoiceNumbers.get(entry.invoiceId) : undefined;
+    return partyLedgerDescription(entry.notes, entry.kind, invoiceNumber, locale);
+  };
 
   const hasOpening = entries.some((entry) => entry.kind === "opening");
   const ledger =
@@ -70,14 +72,15 @@ export default async function StatementsPage({
         ]
       : entries;
 
-  const computed = ledger.reduce<{ balance: number; rows: ((typeof ledger)[number] & { balance: number })[] }>(
+  const computed = ledger.reduce<{
+    balance: number;
+    rows: ((typeof ledger)[number] & { debitAmount: number; creditAmount: number; balance: number })[];
+  }>(
     (state, entry) => {
-      const balance =
-        state.balance +
-        (party?.type === "customer"
-          ? Number(entry.debit) - Number(entry.credit)
-          : Number(entry.credit) - Number(entry.debit));
-      return { balance, rows: [...state.rows, { ...entry, balance }] };
+      const debitAmount = ledgerAmount(entry.debit);
+      const creditAmount = ledgerAmount(entry.credit);
+      const balance = state.balance + partyLedgerBalanceDelta(entry, party?.type ?? "customer");
+      return { balance, rows: [...state.rows, { ...entry, debitAmount, creditAmount, balance }] };
     },
     { balance: 0, rows: [] }
   );
@@ -132,11 +135,11 @@ export default async function StatementsPage({
           </label>
           <label>
             <span>{text("من تاريخ", "From date")}</span>
-            <input type="date" name="from" defaultValue={query.from ?? new Date().toISOString().slice(0, 10)} />
+            <input type="date" name="from" defaultValue={query.from} />
           </label>
           <label>
             <span>{text("إلى تاريخ", "To date")}</span>
-            <input type="date" name="to" defaultValue={query.to ?? new Date().toISOString().slice(0, 10)} />
+            <input type="date" name="to" defaultValue={query.to} />
           </label>
           <button className="primary flex items-center gap-1.5 h-[36px]">
             <Filter size={14} />
@@ -175,9 +178,11 @@ export default async function StatementsPage({
                 <thead>
                   <tr>
                     <th>{text("التاريخ والوقت", "Date and time")}</th>
-                    <th>{text("البيان والتفاصيل", "Description")}</th>
-                    <th className="text-center">{text("مدين (+)", "Debit (+)")}</th>
-                    <th className="text-center">{text("دائن (−)", "Credit (−)")}</th>
+                    <th>{text("نوع المعاملة", "Transaction type")}</th>
+                    <th>{text("البيان", "Description")}</th>
+                    <th>{text("رقم الفاتورة", "Invoice #")}</th>
+                    <th className="text-center">{text("مدين (لنا)", "Debit (receivable)")}</th>
+                    <th className="text-center">{text("دائن (له)", "Credit (payable)")}</th>
                     <th className="text-center">{text("الرصيد الجاري", "Running balance")}</th>
                   </tr>
                 </thead>
@@ -187,25 +192,37 @@ export default async function StatementsPage({
                       <td className="text-xs text-[var(--muted)]">
                         {entry.createdAt.getTime() === 0
                           ? text("رصيد افتتاحي سابق", "Opening balance")
-                          : new Date(entry.createdAt).toLocaleString("en-US")}
+                          : new Date(entry.createdAt).toLocaleString(locale === "en" ? "en-US" : "ar-EG")}
                       </td>
                       <td className="font-semibold text-[var(--ink)]">
-                        {entry.notes ?? kindLabel(entry.kind)}
+                        <span className="inline-flex rounded-full bg-indigo-50 text-indigo-800 border border-indigo-100 px-2 py-0.5 text-[10px] font-bold">
+                          {partyLedgerKindLabel(entry.kind, party.type, Boolean(entry.invoiceId), locale)}
+                        </span>
+                      </td>
+                      <td className="text-xs text-[var(--muted)]">
+                        {transactionDescription(entry)}
+                      </td>
+                      <td className="font-mono text-xs">
+                        {entry.invoiceId && invoiceNumbers.has(entry.invoiceId) ? (
+                          <Link href={`/invoices/${entry.invoiceId}`} className="text-link">
+                            {invoiceNumbers.get(entry.invoiceId)}
+                          </Link>
+                        ) : "—"}
                       </td>
                       <td className="text-center font-semibold">
-                        {Number(entry.debit) > 0 ? `${formatAmount(entry.debit)} ${currency}` : "—"}
+                        {entry.debitAmount !== 0 ? `${formatAmount(entry.debitAmount, locale)} ${currency}` : "—"}
                       </td>
                       <td className="text-center font-semibold">
-                        {Number(entry.credit) > 0 ? `${formatAmount(entry.credit)} ${currency}` : "—"}
+                        {entry.creditAmount !== 0 ? `${formatAmount(entry.creditAmount, locale)} ${currency}` : "—"}
                       </td>
                       <td className="text-center font-bold text-[var(--ink)]">
-                        {formatAmount(entry.balance)} {currency}
+                        {formatAmount(entry.balance, locale)} {currency}
                       </td>
                     </tr>
                   ))}
                   {rows.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="table-empty">
+                      <td colSpan={7} className="table-empty">
                         {text("لا توجد حركات مالية مسجلة لهذا الحساب خلال الفترة المحددة.", "No financial transactions were recorded for this account during the selected period.")}
                       </td>
                     </tr>
@@ -220,43 +237,38 @@ export default async function StatementsPage({
                   <div key={`mob-stmt-${entry.id}`} className="p-3 bg-[var(--panel)] border border-[var(--line)] rounded-xl shadow-xs space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <b className="text-xs font-bold text-[var(--ink)]">
-                        {entry.notes ??
-                          (entry.kind === "sale"
-                            ? text("فاتورة بيع", "Sales invoice")
-                            : entry.kind === "purchase"
-                            ? text("فاتورة شراء", "Purchase invoice")
-                            : entry.kind === "sale_return"
-                            ? text("مرتجع مبيعات", "Sales return")
-                            : entry.kind === "purchase_return"
-                            ? text("مرتجع مشتريات", "Purchase return")
-                            : entry.kind === "payment"
-                            ? text("سند دفعة", "Payment")
-                            : text("حركة", "Transaction"))}
+                        {partyLedgerKindLabel(entry.kind, party.type, Boolean(entry.invoiceId), locale)}
                       </b>
                       <span className="text-[11px] text-[var(--muted)] font-mono shrink-0">
                         {entry.createdAt.getTime() === 0
                           ? text("رصيد افتتاحي", "Opening balance")
-                          : new Date(entry.createdAt).toLocaleDateString("en-US")}
+                          : new Date(entry.createdAt).toLocaleDateString(locale === "en" ? "en-US" : "ar-EG")}
                       </span>
                     </div>
+                    <p className="text-[11px] text-[var(--muted)]">{transactionDescription(entry)}</p>
+                    {entry.invoiceId && invoiceNumbers.has(entry.invoiceId) && (
+                      <Link href={`/invoices/${entry.invoiceId}`} className="text-link text-[11px]">
+                        {text("فاتورة رقم:", "Invoice #")} {invoiceNumbers.get(entry.invoiceId)}
+                      </Link>
+                    )}
 
                     <div className="grid grid-cols-3 gap-2 py-1.5 px-2 bg-[var(--bg)] rounded-lg text-center border border-[var(--line)]">
                       <div>
-                        <span className="text-[10px] text-[var(--muted)] block">{text("مدين (+)", "Debit (+)")}</span>
-                        <b className="text-xs text-rose-600 font-mono">
-                          {Number(entry.debit) > 0 ? `${formatAmount(entry.debit)}` : "—"}
+                        <span className="text-[10px] text-[var(--muted)] block">{text("مدين (لنا)", "Debit (receivable)")}</span>
+                        <b className="text-xs text-rose-700 font-semibold">
+                          {entry.debitAmount !== 0 ? `${formatAmount(entry.debitAmount, locale)} ${currency}` : "—"}
                         </b>
                       </div>
                       <div>
-                        <span className="text-[10px] text-[var(--muted)] block">{text("دائن (−)", "Credit (−)")}</span>
-                        <b className="text-xs text-emerald-700 font-mono">
-                          {Number(entry.credit) > 0 ? `${formatAmount(entry.credit)}` : "—"}
+                        <span className="text-[10px] text-[var(--muted)] block">{text("دائن (له)", "Credit (payable)")}</span>
+                        <b className="text-xs text-emerald-700 font-semibold">
+                          {entry.creditAmount !== 0 ? `${formatAmount(entry.creditAmount, locale)} ${currency}` : "—"}
                         </b>
                       </div>
                       <div>
                         <span className="text-[10px] text-[var(--muted)] block">{text("الرصيد", "Balance")}</span>
-                        <b className="text-xs text-[var(--ink)] font-mono">
-                          {formatAmount(entry.balance)}
+                        <b className="text-xs text-[var(--ink)] font-semibold">
+                          {formatAmount(entry.balance, locale)} {currency}
                         </b>
                       </div>
                     </div>

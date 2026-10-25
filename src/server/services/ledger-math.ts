@@ -1,6 +1,21 @@
 type LedgerTransaction = { kind: string; amount: string | number };
 type LedgerEntry = { debit?: string | number | null; credit?: string | number | null };
 
+export function ledgerAmount(value: string | number | null | undefined): number {
+  const amount = Number(value ?? 0);
+  if (!Number.isFinite(amount)) throw new Error("INVALID_PARTY_LEDGER_AMOUNT");
+  return amount;
+}
+
+export function partyLedgerBalanceDelta(
+  entry: LedgerEntry,
+  type: "customer" | "supplier",
+): number {
+  const debit = ledgerAmount(entry.debit);
+  const credit = ledgerAmount(entry.credit);
+  return type === "customer" ? debit - credit : credit - debit;
+}
+
 export function cashboxBalance(opening: string | number, transactions: LedgerTransaction[]) {
   const openingBalance = Number(opening) || 0;
   return transactions.reduce((balance, tx) => {
@@ -40,9 +55,7 @@ export function partyBalance(
   }
 
   return ledgerEntries.reduce((balance, entry) => {
-    const debit = Number(entry.debit ?? 0) || 0;
-    const credit = Number(entry.credit ?? 0) || 0;
-    return balance + (partyType === "customer" ? debit - credit : credit - debit);
+    return balance + partyLedgerBalanceDelta(entry, partyType);
   }, openingBalance);
 }
 

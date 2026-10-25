@@ -9,6 +9,8 @@ import { PrintButton } from "@/components/print-button";
 import { requirePermission } from "@/server/permissions";
 import { formatAmount } from "@/lib/number-format";
 import { Locale } from "@/lib/i18n";
+import { partyLedgerDescription, partyLedgerKindLabel } from "@/lib/party-ledger-labels";
+import { ledgerAmount, partyLedgerBalanceDelta } from "@/server/services/ledger-math";
 
 export default async function PartyStatement({
   params,
@@ -25,14 +27,6 @@ export default async function PartyStatement({
   const locale = (settingsRow?.locale === "en" ? "en" : "ar") as Locale;
   const text = (ar: string, en: string) => (locale === "en" ? en : ar);
   const currency = locale === "en" ? "EGP" : "ج.م";
-  const kindLabel = (kind: string) =>
-    ({
-      sale: text("فاتورة بيع", "Sales invoice"),
-      purchase: text("فاتورة شراء", "Purchase invoice"),
-      sale_return: text("مرتجع مبيعات", "Sales return"),
-      purchase_return: text("مرتجع مشتريات", "Purchase return"),
-      payment: text("دفعة مالية", "Payment"),
-    })[kind] ?? text("حركة حساب", "Account transaction");
   const [party] = await db.select().from(parties).where(eq(parties.id, id)).limit(1);
   if (!party) notFound();
 
@@ -61,6 +55,10 @@ export default async function PartyStatement({
   ).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
   const invoiceNumbers = new Map(linkedInvoices.map((item) => [item.id, item.number]));
+  const transactionDescription = (entry: { kind: string; invoiceId: string | null; notes: string | null }) => {
+    const invoiceNumber = entry.invoiceId ? invoiceNumbers.get(entry.invoiceId) : undefined;
+    return partyLedgerDescription(entry.notes, entry.kind, invoiceNumber, locale);
+  };
   const filtered = allEntries.filter(
     (entry) =>
       (!query.from || entry.createdAt >= new Date(`${query.from}T00:00:00`)) &&
@@ -68,18 +66,11 @@ export default async function PartyStatement({
   );
 
   const rows = filtered.map((entry) => {
-    const debit = Number(entry.debit);
-    const credit = Number(entry.credit);
+    const debit = ledgerAmount(entry.debit);
+    const credit = ledgerAmount(entry.credit);
     const balance = allEntries
       .slice(0, allEntries.indexOf(entry) + 1)
-      .reduce(
-        (total, item) =>
-          total +
-          (party.type === "customer"
-            ? Number(item.debit) - Number(item.credit)
-            : Number(item.credit) - Number(item.debit)),
-        0
-      );
+      .reduce((total, item) => total + partyLedgerBalanceDelta(item, party.type), 0);
     return { ...entry, debit, credit, balance };
   });
 
@@ -142,10 +133,11 @@ export default async function PartyStatement({
             <thead>
               <tr>
                 <th>{text("التاريخ والوقت", "Date and time")}</th>
-                <th>{text("البيان والتفاصيل", "Description")}</th>
+                <th>{text("نوع المعاملة", "Transaction type")}</th>
+                <th>{text("البيان", "Description")}</th>
                 <th>{text("رقم الفاتورة المرتبطة", "Related invoice")}</th>
-                <th className="text-center">{text("مدين (+)", "Debit (+)")}</th>
-                <th className="text-center">{text("دائن (−)", "Credit (−)")}</th>
+                <th className="text-center">{text("مدين (لنا)", "Debit (receivable)")}</th>
+                <th className="text-center">{text("دائن (له)", "Credit (payable)")}</th>
                 <th className="text-center">{text("الرصيد التراكمي", "Running balance")}</th>
               </tr>
             </thead>
@@ -154,34 +146,39 @@ export default async function PartyStatement({
                 rows.map((entry) => (
                   <tr key={entry.id}>
                     <td className="text-xs text-[var(--muted)]">
-                      {new Date(entry.createdAt).toLocaleString("en-US")}
+                      {new Date(entry.createdAt).toLocaleString(locale === "en" ? "en-US" : "ar-EG")}
                     </td>
                     <td className="font-semibold text-[var(--ink)]">
-                      {entry.notes ?? kindLabel(entry.kind)}
+                      <span className="inline-flex rounded-full bg-indigo-50 text-indigo-800 border border-indigo-100 px-2 py-0.5 text-[10px] font-bold">
+                        {partyLedgerKindLabel(entry.kind, party.type, Boolean(entry.invoiceId), locale)}
+                      </span>
+                    </td>
+                    <td className="text-xs text-[var(--muted)]">
+                      {transactionDescription(entry)}
                     </td>
                     <td className="font-mono text-xs">
-                      {entry.invoiceId ? (
+                      {entry.invoiceId && invoiceNumbers.has(entry.invoiceId) ? (
                         <Link href={`/invoices/${entry.invoiceId}`} className="text-link">
-                          {invoiceNumbers.get(entry.invoiceId) ?? entry.invoiceId}
+                          {invoiceNumbers.get(entry.invoiceId)}
                         </Link>
                       ) : (
                         "—"
                       )}
                     </td>
-                    <td className="text-center font-semibold">
-                      {entry.debit > 0 ? `${formatAmount(entry.debit)} ${currency}` : "—"}
+                    <td className="text-center font-semibold text-rose-700">
+                      {entry.debit !== 0 ? `${formatAmount(entry.debit, locale)} ${currency}` : "—"}
                     </td>
-                    <td className="text-center font-semibold">
-                      {entry.credit > 0 ? `${formatAmount(entry.credit)} ${currency}` : "—"}
+                    <td className="text-center font-semibold text-emerald-700">
+                      {entry.credit !== 0 ? `${formatAmount(entry.credit, locale)} ${currency}` : "—"}
                     </td>
                     <td className="text-center font-bold text-[var(--ink)]">
-                      {formatAmount(entry.balance)} {currency}
+                      {formatAmount(entry.balance, locale)} {currency}
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="table-empty">
+                  <td colSpan={7} className="table-empty">
                     {text("لا توجد حركات مالية مسجلة في الفترة المحددة لهذا الحساب.", "No financial transactions were recorded for this account during the selected period.")}
                   </td>
                 </tr>

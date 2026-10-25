@@ -1,0 +1,2 @@
+ALTER TABLE "invoice_lines" ADD COLUMN "bonus_quantity" numeric(14, 3) DEFAULT '0' NOT NULL;--> statement-breakpoint
+ALTER TABLE "invoice_lines" ADD COLUMN "discount_per_unit" numeric(14, 2) DEFAULT '0' NOT NULL;

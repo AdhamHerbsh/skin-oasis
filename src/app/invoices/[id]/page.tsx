@@ -24,12 +24,19 @@ import { InvoicePrintView } from "@/features/invoices/invoice-print-view";
 import { localLogoUrl } from "@/server/services/branding";
 import { Locale, translate } from "@/lib/i18n";
 
-export default async function InvoiceDetails({ params }: { params: Promise<{ id: string }> }) {
+export default async function InvoiceDetails({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ edit?: string }>;
+}) {
   const userId = await getSessionUserId();
   if (!userId) redirect("/login");
   await requirePermission("invoices", "view");
 
-  const { id } = await params;
+  const [{ id }, query] = await Promise.all([params, searchParams]);
+  const editModeRequested = query.edit === "1";
   const [row] = await db
     .select({ invoice: invoices, party: parties, org: settings })
     .from(invoices)
@@ -40,8 +47,11 @@ export default async function InvoiceDetails({ params }: { params: Promise<{ id:
 
   if (!row) notFound();
   const lines = await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, id));
+  const invoiceProductNames = [
+    ...new Set(lines.map((line) => line.description.replace(/\s+\[.*\]\s*$/, "").trim()).filter(Boolean)),
+  ];
 
-  const [editGrant, activeProducts, originalProducts, activeCashboxes, invoiceCash, activeParties, allUnits, ledgerBalances, invoiceLedgerRows] = await Promise.all([
+  const [editGrant, activeProducts, originalProducts, descriptionProducts, activeCashboxes, invoiceCash, activeParties, allUnits, ledgerBalances, invoiceLedgerRows] = await Promise.all([
     db
       .select({ id: permissions.id })
       .from(users)
@@ -88,6 +98,21 @@ export default async function InvoiceDetails({ params }: { params: Promise<{ id:
             )
           )
       : Promise.resolve([]),
+    invoiceProductNames.length > 0
+      ? db
+          .select({
+            id: products.id,
+            name: products.name,
+            sku: products.sku,
+            barcode: products.barcode,
+            stock: products.stock,
+            salePrice: products.salePrice,
+            costPrice: products.costPrice,
+            unitId: products.unitId,
+          })
+          .from(products)
+          .where(inArray(products.name, invoiceProductNames))
+      : Promise.resolve([]),
     db.select({ id: cashboxes.id, name: cashboxes.name }).from(cashboxes).where(eq(cashboxes.active, true)),
     db
       .select()
@@ -107,7 +132,7 @@ export default async function InvoiceDetails({ params }: { params: Promise<{ id:
   ]);
 
   const productOptions = [
-    ...new Map([...activeProducts, ...originalProducts].map((product) => [product.id, product])).values(),
+    ...new Map([...activeProducts, ...originalProducts, ...descriptionProducts].map((product) => [product.id, product])).values(),
   ];
   const defaultCashbox =
     invoiceCash.find((entry) => activeCashboxes.some((box) => box.id === entry.cashboxId))?.cashboxId ?? "";
@@ -116,10 +141,76 @@ export default async function InvoiceDetails({ params }: { params: Promise<{ id:
   const locale = (row.org?.locale === "en" ? "en" : "ar") as Locale;
   const text = (ar: string, en: string) => (locale === "en" ? en : ar);
   const remaining = Math.max(0, Number(invoice.total) - Number(invoice.paid));
+  const canEditInvoice = editGrant.length > 0 && (invoice.type === "sale" || invoice.type === "purchase");
+  const showEditPage = editModeRequested && canEditInvoice;
   const partyBalances = Object.fromEntries(ledgerBalances.map(({ partyId, balance }) => [partyId, Number(balance)]));
   if (invoice.partyId) {
     const invoiceBalanceEffect = invoiceLedgerRows.reduce((sum, entry) => sum + Number(entry.debit) - Number(entry.credit), 0);
     partyBalances[invoice.partyId] = (partyBalances[invoice.partyId] ?? 0) - invoiceBalanceEffect;
+  }
+
+  const initialInvoice = {
+    id: invoice.id,
+    type: invoice.type,
+    partyId: invoice.partyId,
+    cashboxId: defaultCashbox,
+    paid: invoice.paid,
+    discount: invoice.discount,
+    tax: invoice.tax,
+    lines: lines.map((line) => {
+      const unitMatch = line.description.match(/\s+\[(.*?)(?:\s+×\s+(\d+(?:\.\d+)?))?\]\s*$/);
+      const unitName = unitMatch?.[1];
+      const descriptionName = line.description.replace(/\s+\[.*\]\s*$/, "").trim();
+      const product =
+        productOptions.find((item) => item.id === line.productId) ??
+        productOptions.find((item) => item.name.trim() === descriptionName);
+      const matchedUnit = unitName ? allUnits.find((unit) => unit.name === unitName) : undefined;
+      const productUnit = allUnits.find((unit) => unit.id === product?.unitId);
+      const unitFactor = unitMatch?.[2] ?? matchedUnit?.factor ?? productUnit?.factor;
+
+      return {
+        productId: product?.id ?? line.productId ?? "",
+        name: product?.name ?? descriptionName,
+        quantity: line.quantity,
+        bonusQuantity: line.bonusQuantity,
+        unitPrice: line.unitPrice,
+        discountValue: line.discountValue,
+        discountType: line.discountType === "percent" ? ("percent" as const) : ("amount" as const),
+        unitId: matchedUnit?.id ?? productUnit?.id,
+        unitName,
+        unitFactor,
+        basePrice: String(Number(line.unitPrice) / (Number(unitFactor) || 1)),
+        minPrice: String(Number(product?.costPrice ?? 0) * (Number(unitFactor) || 1)),
+      };
+    }),
+  };
+
+  if (showEditPage) {
+    return (
+      <main className="main standalone">
+        <header className="topbar print-hide">
+          <div>
+            <p className="eyebrow">{text("تعديل تفاصيل الفاتورة", "Edit invoice details")}</p>
+            <h1>{text("فاتورة", "Invoice")} {invoice.number}</h1>
+          </div>
+          <Link className="secondary" href={`/invoices/${invoice.id}`}>
+            <ArrowRight size={15} />
+            <span>{text("العودة إلى الفاتورة", "Back to invoice")}</span>
+          </Link>
+        </header>
+        <section className="panel">
+          <InvoiceForm
+            products={productOptions}
+            parties={activeParties}
+            cashboxes={activeCashboxes}
+            units={allUnits}
+            partyBalances={partyBalances}
+            initial={initialInvoice}
+            fullPageEdit
+          />
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -131,44 +222,11 @@ export default async function InvoiceDetails({ params }: { params: Promise<{ id:
           <h1>{text("فاتورة", "Invoice")} {invoice.number}</h1>
         </div>
         <div className="top-actions">
-          {editGrant.length > 0 && (invoice.type === "sale" || invoice.type === "purchase") && (
-            <details className="editor print-hide">
-              <summary className="primary">
-                <Edit3 size={15} />
-                <span>{text("تعديل الفاتورة", "Edit invoice")}</span>
-              </summary>
-              <InvoiceForm
-                products={productOptions}
-                parties={activeParties}
-                cashboxes={activeCashboxes}
-                units={allUnits}
-                partyBalances={partyBalances}
-                initial={{
-                  id: invoice.id,
-                  type: invoice.type,
-                  partyId: invoice.partyId,
-                  cashboxId: defaultCashbox,
-                  paid: invoice.paid,
-                  discount: invoice.discount,
-                  tax: invoice.tax,
-                  lines: lines.map((line) => {
-                    const unitMatch = line.description.match(/\[(.*?) × (\d+(\.\d+)?)\]/);
-                    const unitName = unitMatch ? unitMatch[1] : undefined;
-                    const unitFactor = unitMatch ? unitMatch[2] : undefined;
-                    const matchedUnit = unitName ? allUnits.find((u) => u.name === unitName) : undefined;
-                    return {
-                      productId: line.productId ?? "",
-                      name: line.description,
-                      quantity: line.quantity,
-                      unitPrice: line.unitPrice,
-                      unitId: matchedUnit?.id,
-                      unitName,
-                      unitFactor,
-                    };
-                  }),
-                }}
-              />
-            </details>
+          {canEditInvoice && (
+            <Link className="primary" href={`/invoices/${invoice.id}?edit=1`}>
+              <Edit3 size={15} />
+              <span>{text("تعديل الفاتورة", "Edit invoice")}</span>
+            </Link>
           )}
           <Link className="secondary" href="/invoices">
             <ArrowRight size={15} />
@@ -183,7 +241,10 @@ export default async function InvoiceDetails({ params }: { params: Promise<{ id:
           invoice: row.invoice,
           party: row.party,
           org: row.org,
-          lines,
+          lines: lines.map((line) => ({
+            ...line,
+            discountType: line.discountType === "percent" ? ("percent" as const) : ("amount" as const),
+          })),
           invoiceLogo,
         }}
       />

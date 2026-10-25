@@ -20,7 +20,10 @@ const schema = z.object({
       z.object({
         productId: zUuid,
         quantity: z.string().regex(/^\d+(\.\d{1,3})?$/),
+        bonusQuantity: z.string().regex(/^\d+(\.\d{1,3})?$/),
         unitPrice: z.string().regex(/^\d+(\.\d{1,2})?$/),
+        discountValue: z.string().regex(/^\d+(\.\d{1,2})?$/),
+        discountType: z.enum(["amount", "percent"]),
         unitName: z.string().optional(),
         unitFactor: z.string().optional(),
       })

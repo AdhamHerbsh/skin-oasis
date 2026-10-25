@@ -212,6 +212,12 @@ body, table, input, select, textarea, button, .kpi, .total-highlight {
   font-feature-settings: "tnum" 1, "cv01" 1;
 }
 
+.dashboard-number {
+  font-family: var(--font-tajawal), 'Cairo', system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: normal;
+}
+
 /* Accessible focus rings */
 button:focus-visible,
 a:focus-visible,
@@ -244,7 +250,7 @@ html[dir="rtl"] .dashboard-main {
   margin-left: 0;
   padding: 24px 32px 48px;
   box-sizing: border-box;
-  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), margin-right 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), margin 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 html[dir="ltr"] .main,
@@ -257,7 +263,7 @@ html[dir="ltr"] .dashboard-main {
   margin-right: 0;
   padding: 24px 32px 48px;
   box-sizing: border-box;
-  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), margin-left 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), margin 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 html[dir="rtl"] body.sidebar-collapsed .main,
@@ -267,6 +273,7 @@ html[dir="rtl"] body:has(.global-navigation.is-collapsed) .main,
 html[dir="rtl"] body:has(.global-navigation.is-collapsed) .main.standalone,
 html[dir="rtl"] body:has(.global-navigation.is-collapsed) .dashboard-main {
   width: calc(100% - var(--sidebar-w-collapsed));
+  max-width: calc(100% - var(--sidebar-w-collapsed));
   margin-right: var(--sidebar-w-collapsed);
   margin-left: 0;
 }
@@ -278,6 +285,7 @@ html[dir="ltr"] body:has(.global-navigation.is-collapsed) .main,
 html[dir="ltr"] body:has(.global-navigation.is-collapsed) .main.standalone,
 html[dir="ltr"] body:has(.global-navigation.is-collapsed) .dashboard-main {
   width: calc(100% - var(--sidebar-w-collapsed));
+  max-width: calc(100% - var(--sidebar-w-collapsed));
   margin-left: var(--sidebar-w-collapsed);
   margin-right: 0;
 }
@@ -982,6 +990,15 @@ summary:active {
 .editor[open] > form:has(.permission-grid) {
   width: min(96vw, 820px);
   max-width: 820px;
+}
+
+.editor[open] > form.invoice-form {
+  width: min(96vw, 1200px);
+  max-width: 1200px;
+  max-height: min(92vh, 900px);
+  padding: clamp(16px, 2vw, 26px);
+  overflow-x: hidden;
+  overscroll-behavior: contain;
 }
 
 /* Modal Header Bar */
@@ -1698,6 +1715,7 @@ tbody tr:hover td {
     margin: 0 !important;
     width: 100% !important;
   }
+
 }
 
 /* Thermal POS 80mm Receipt Mode */

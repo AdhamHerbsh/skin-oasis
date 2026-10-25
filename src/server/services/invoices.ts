@@ -1,6 +1,7 @@
 import "server-only";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/server/db";
+import { calculateInvoiceLineAmounts, calculateInvoiceStockQuantity, calculateInvoiceTotal, type InvoiceDiscountType } from "@/lib/invoice-math";
 import { cashboxBalance, restoreEditedInvoiceStock, reverseCashKind } from "@/server/services/ledger-math";
 import { auditLogs, cashTransactions, cashboxes, invoiceLines, invoices, parties, partyLedger, products, stockMovements } from "@/server/db/schema";
 
@@ -14,7 +15,10 @@ export type InvoiceInput = {
   lines: {
     productId: string;
     quantity: string;
+    bonusQuantity?: string;
     unitPrice: string;
+    discountValue?: string;
+    discountType?: InvoiceDiscountType;
     unitName?: string;
     unitFactor?: string;
   }[];
@@ -35,25 +39,30 @@ export async function createInvoice(input: InvoiceInput, userId: string) {
     const normalized = [];
     const quantitiesByProduct = new Map<string, number>();
     let subtotal = 0;
+    let lineDiscountTotal = 0;
     const productIds = [...new Set(input.lines.map((line) => line.productId))].sort();
     const lockedProducts = await tx.select().from(products).where(inArray(products.id, productIds)).orderBy(products.id).for("update");
     const productsById = new Map(lockedProducts.map((product) => [product.id, product]));
 
     for (const line of input.lines) {
       const qty = Number(line.quantity),
-        price = Number(line.unitPrice);
+        bonusQty = Number(line.bonusQuantity ?? 0),
+        price = Number(line.unitPrice),
+        discountValue = Number(line.discountValue ?? 0);
+      const discountType = line.discountType ?? "amount";
       const factor = Number(line.unitFactor ?? 1);
-      const stockQty = qty * factor;
+      const stockQty = calculateInvoiceStockQuantity(qty, bonusQty, factor);
 
-      if (!Number.isFinite(qty) || qty <= 0 || Math.round(qty * 1000) !== qty * 1000 || !Number.isFinite(price) || price < 0 || Math.round(price * 100) !== price * 100 || !Number.isFinite(factor) || factor <= 0 || Math.round(factor * 10000) !== factor * 10000) {
+      if (!Number.isFinite(qty) || qty <= 0 || Math.round(qty * 1000) !== qty * 1000 || !Number.isFinite(bonusQty) || bonusQty < 0 || Math.round(bonusQty * 1000) !== bonusQty * 1000 || !Number.isFinite(price) || price < 0 || Math.round(price * 100) !== price * 100 || !Number.isFinite(discountValue) || discountValue < 0 || (discountType === "amount" && discountValue > price) || (discountType === "percent" && discountValue > 100) || Math.round(discountValue * 100) !== discountValue * 100 || !["amount", "percent"].includes(discountType) || !Number.isFinite(factor) || factor <= 0 || Math.round(factor * 10000) !== factor * 10000) {
         throw new Error("INVALID_LINE");
       }
       const p = productsById.get(line.productId);
       if (!p || !p.active) throw new Error("PRODUCT_NOT_FOUND");
       quantitiesByProduct.set(p.id, (quantitiesByProduct.get(p.id) ?? 0) + stockQty);
-      const total = Math.round(qty * price * 100) / 100;
-      subtotal += total;
-      normalized.push({ p, qty, price, factor, unitName: line.unitName, stockQty, total });
+      const amounts = calculateInvoiceLineAmounts(qty, price, discountValue, discountType);
+      subtotal += amounts.subtotal;
+      lineDiscountTotal += amounts.discount;
+      normalized.push({ p, qty, bonusQty, price, discountValue, discountType, factor, unitName: line.unitName, stockQty, ...amounts });
     }
 
     // Check stock for sales and purchase returns (where items leave the warehouse)
@@ -70,8 +79,8 @@ export async function createInvoice(input: InvoiceInput, userId: string) {
       }
     }
 
-    const total = Math.max(0, Math.round((subtotal - disc + tax) * 100) / 100);
-    if (disc > subtotal || paid > total) throw new Error("AMOUNT_OUT_OF_RANGE");
+    const total = calculateInvoiceTotal(subtotal, lineDiscountTotal, disc, tax);
+    if (disc > subtotal - lineDiscountTotal || paid > total) throw new Error("AMOUNT_OUT_OF_RANGE");
 
     if (paid < total && !input.partyId) {
       throw new Error("ANONYMOUS_CREDIT_NOT_ALLOWED");
@@ -148,7 +157,10 @@ export async function createInvoice(input: InvoiceInput, userId: string) {
         productId: line.p.id,
         description,
         quantity: String(line.qty),
+        bonusQuantity: String(line.bonusQty),
         unitPrice: money(line.price),
+        discountValue: money(line.discountValue),
+        discountType: line.discountType,
         costPrice: money(Number(line.p.costPrice) * line.factor),
         lineTotal: money(line.total),
       });
@@ -163,7 +175,7 @@ export async function createInvoice(input: InvoiceInput, userId: string) {
         .update(products)
         .set({
           stock: sql`${products.stock} + ${delta}`,
-          ...(input.type === "purchase" ? { costPrice: money(line.price / line.factor) } : {}),
+          ...(input.type === "purchase" ? { costPrice: money(line.total / line.stockQty) } : {}),
         })
         .where(eq(products.id, line.p.id));
 
@@ -171,12 +183,12 @@ export async function createInvoice(input: InvoiceInput, userId: string) {
         productId: line.p.id,
         type: input.type,
         quantity: String(Math.abs(delta)),
-        unitCost: money(input.type === "purchase" ? line.price / line.factor : Number(line.p.costPrice)),
+        unitCost: money(input.type === "purchase" ? line.total / line.stockQty : Number(line.p.costPrice)),
         invoiceId: invoice.id,
         reason:
           line.factor > 1
-            ? `فاتورة ${input.type}: ${line.qty} ${line.unitName ?? "كرتونة"} (${line.stockQty} قطعة)`
-            : `فاتورة ${input.type}: ${line.qty} قطعة`,
+            ? `فاتورة ${input.type}: ${line.qty} ${line.unitName ?? "كرتونة"}${line.bonusQty > 0 ? ` + ${line.bonusQty} بونص` : ""} (${line.stockQty} قطعة)`
+            : `فاتورة ${input.type}: ${line.qty}${line.bonusQty > 0 ? ` + ${line.bonusQty} بونص` : ""} قطعة`,
         userId,
       });
     }
@@ -447,7 +459,7 @@ export async function updateInvoice(invoiceId:string,input:InvoiceInput,userId:s
     for (const line of oldLines) if (line.productId) {
       const factorMatch = line.description.match(/×\s*(\d+(\.\d+)?)/);
       const factor = factorMatch ? Number(factorMatch[1]) : 1;
-      const totalPcs = Number(line.quantity) * factor;
+      const totalPcs = (Number(line.quantity) + Number(line.bonusQuantity ?? 0)) * factor;
       oldQuantities.set(line.productId, (oldQuantities.get(line.productId) ?? 0) + totalPcs);
       if (!currentProducts.has(line.productId)) {
         const [product] = await tx
@@ -485,21 +497,30 @@ export async function updateInvoice(invoiceId:string,input:InvoiceInput,userId:s
   const normalized = [] as {
     product: typeof products.$inferSelect;
     quantity: number;
+    bonusQuantity: number;
     price: number;
+    discountValue: number;
+    discountType: InvoiceDiscountType;
     factor: number;
     unitName?: string;
     stockQty: number;
     lineTotal: number;
+    subtotal: number;
+    discount: number;
   }[];
   const newQuantities = new Map<string, number>();
   let subtotal = 0;
+  let lineDiscountTotal = 0;
   for (const line of input.lines) {
     const quantity = Number(line.quantity),
-      price = Number(line.unitPrice);
+      bonusQuantity = Number(line.bonusQuantity ?? 0),
+      price = Number(line.unitPrice),
+      discountValue = Number(line.discountValue ?? 0);
+    const discountType = line.discountType ?? "amount";
     const factor = Number(line.unitFactor ?? 1);
-    const stockQty = quantity * factor;
+    const stockQty = calculateInvoiceStockQuantity(quantity, bonusQuantity, factor);
 
-    if (!Number.isFinite(quantity) || quantity <= 0 || Math.round(quantity * 1000) !== quantity * 1000 || !Number.isFinite(price) || price < 0 || Math.round(price * 100) !== price * 100 || !Number.isFinite(factor) || factor <= 0 || Math.round(factor * 10000) !== factor * 10000) {
+    if (!Number.isFinite(quantity) || quantity <= 0 || Math.round(quantity * 1000) !== quantity * 1000 || !Number.isFinite(bonusQuantity) || bonusQuantity < 0 || Math.round(bonusQuantity * 1000) !== bonusQuantity * 1000 || !Number.isFinite(price) || price < 0 || Math.round(price * 100) !== price * 100 || !Number.isFinite(discountValue) || discountValue < 0 || (discountType === "amount" && discountValue > price) || (discountType === "percent" && discountValue > 100) || Math.round(discountValue * 100) !== discountValue * 100 || !["amount", "percent"].includes(discountType) || !Number.isFinite(factor) || factor <= 0 || Math.round(factor * 10000) !== factor * 10000) {
       throw new Error("INVALID_LINE");
     }
     let product = currentProducts.get(line.productId);
@@ -515,9 +536,10 @@ export async function updateInvoice(invoiceId:string,input:InvoiceInput,userId:s
       currentProducts.set(product.id, product);
     }
     newQuantities.set(product.id, (newQuantities.get(product.id) ?? 0) + stockQty);
-    const lineTotal = Math.round(quantity * price * 100) / 100;
-    subtotal += lineTotal;
-    normalized.push({ product, quantity, price, factor, unitName: line.unitName, stockQty, lineTotal });
+    const amounts = calculateInvoiceLineAmounts(quantity, price, discountValue, discountType);
+    subtotal += amounts.subtotal;
+    lineDiscountTotal += amounts.discount;
+    normalized.push({ product, quantity, bonusQuantity, price, discountValue, discountType, factor, unitName: line.unitName, stockQty, lineTotal: amounts.total, subtotal: amounts.subtotal, discount: amounts.discount });
   }
 
   if (invoice.type === "sale") {
@@ -529,8 +551,8 @@ export async function updateInvoice(invoiceId:string,input:InvoiceInput,userId:s
     }
   }
 
-  const total = Math.max(0, Math.round((subtotal - disc + tax) * 100) / 100);
-  if (disc > subtotal || paid > total) throw new Error("AMOUNT_OUT_OF_RANGE");
+  const total = calculateInvoiceTotal(subtotal, lineDiscountTotal, disc, tax);
+  if (disc > subtotal - lineDiscountTotal || paid > total) throw new Error("AMOUNT_OUT_OF_RANGE");
 
   if (paid < total && !input.partyId) {
     throw new Error("ANONYMOUS_CREDIT_NOT_ALLOWED");
@@ -613,7 +635,10 @@ export async function updateInvoice(invoiceId:string,input:InvoiceInput,userId:s
       productId: line.product.id,
       description: desc,
       quantity: String(line.quantity),
+      bonusQuantity: String(line.bonusQuantity),
       unitPrice: money(line.price),
+      discountValue: money(line.discountValue),
+      discountType: line.discountType,
       costPrice: money(Number(line.product.costPrice) * line.factor),
       lineTotal: money(line.lineTotal),
     });
@@ -622,7 +647,7 @@ export async function updateInvoice(invoiceId:string,input:InvoiceInput,userId:s
       .update(products)
       .set({
         stock: sql`${products.stock} + ${delta}`,
-        ...(invoice.type === "purchase" ? { costPrice: money(line.price / line.factor) } : {}),
+        ...(invoice.type === "purchase" ? { costPrice: money(line.lineTotal / line.stockQty) } : {}),
       })
       .where(eq(products.id, line.product.id));
 
@@ -630,12 +655,12 @@ export async function updateInvoice(invoiceId:string,input:InvoiceInput,userId:s
       productId: line.product.id,
       type: invoice.type,
       quantity: String(Math.abs(delta)),
-      unitCost: money(invoice.type === "purchase" ? line.price / line.factor : Number(line.product.costPrice)),
+      unitCost: money(invoice.type === "purchase" ? line.lineTotal / line.stockQty : Number(line.product.costPrice)),
       invoiceId: invoice.id,
       reason:
         line.factor > 1
-          ? `تحديث الفاتورة ${invoice.number}: ${line.quantity} ${line.unitName} (${line.stockQty} قطعة)`
-          : `تحديث الفاتورة ${invoice.number}: ${line.quantity} قطعة`,
+          ? `تحديث الفاتورة ${invoice.number}: ${line.quantity} ${line.unitName}${line.bonusQuantity > 0 ? ` + ${line.bonusQuantity} بونص` : ""} (${line.stockQty} قطعة)`
+          : `تحديث الفاتورة ${invoice.number}: ${line.quantity}${line.bonusQuantity > 0 ? ` + ${line.bonusQuantity} بونص` : ""} قطعة`,
       userId,
     });
   }

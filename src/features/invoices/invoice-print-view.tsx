@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n-client";
 import { formatAmount } from "@/lib/number-format";
+import { calculateInvoiceLineAmounts } from "@/lib/invoice-math";
 
 type InvoiceData = {
   invoice: {
@@ -39,13 +40,18 @@ type InvoiceData = {
     organizationName: string;
     logoPath: string | null;
     phone: string | null;
+    commercialRegistrationNumber: string | null;
+    taxNumber: string | null;
     invoiceFooter: string | null;
   } | null;
   lines: {
     id: string;
     description: string;
     quantity: string;
+    bonusQuantity: string;
     unitPrice: string;
+    discountValue: string;
+    discountType: "amount" | "percent";
     costPrice: string;
     lineTotal: string;
   }[];
@@ -58,6 +64,16 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
   const currency = locale === "en" ? "EGP" : "ج.م";
   const [format, setFormat] = useState<"a4" | "thermal" | "dispatch">("a4");
   const { invoice, party, org, lines, invoiceLogo } = data;
+  const itemDiscountTotal = lines.reduce(
+    (sum, line) =>
+      sum + calculateInvoiceLineAmounts(
+        Number(line.quantity),
+        Number(line.unitPrice),
+        Number(line.discountValue),
+        line.discountType
+      ).discount,
+    0
+  );
   const remaining = Math.max(0, Number(invoice.total) - Number(invoice.paid));
   const dateFormatted = new Date(invoice.createdAt).toLocaleString(locale === "en" ? "en-US" : "ar-EG", {
     year: "numeric",
@@ -159,9 +175,19 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
               )}
               <div>
                 <h2 className="text-xl font-black text-[var(--ink)]">{org?.organizationName ?? "Apex Software"}</h2>
+                {org?.commercialRegistrationNumber && (
+                  <p className="text-xs font-semibold text-[var(--muted)] mt-1">
+                    {t("settings.commercialRegistrationNumber", "Commercial registration number")}: {org.commercialRegistrationNumber}
+                  </p>
+                )}
+                {org?.taxNumber && (
+                  <p className="text-xs font-semibold text-[var(--muted)]">
+                    {t("settings.taxNumber", "Tax number")}: {org.taxNumber}
+                  </p>
+                )}
                 <p className="text-xs font-bold text-[var(--muted)] mt-1">
                   {invoice.type === "sale"
-                    ? text("فاتورة مبيعات ضريبية تجارية", "Commercial sales tax invoice")
+                    ? text("فاتورة مبيعات ", "Commercial sales tax invoice")
                     : invoice.type === "purchase"
                     ? text("فاتورة مشتريات وتوريد بضائع", "Purchase and goods supply invoice")
                     : invoice.type === "sale_return"
@@ -195,20 +221,24 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
             <table>
               <thead>
                 <tr>
-                  <th className="w-12 text-center">#</th>
                   <th>{text("اسم الصنف والبيان", "Item description")}</th>
                   <th className="text-center w-28">{text("الكمية", "Quantity")}</th>
                   <th className="text-center w-32">{text("سعر الوحدة", "Unit price")}</th>
+                  <th className="text-center w-24">{text("البونص", "Bonus")}</th>
+                  <th className="text-center w-28">{text("الخصم", "Discount")}</th>
+                  <th className="text-center w-32">{text("السعر بعد الخصم", "Price after discount")}</th>
                   <th className="text-center w-36">{text("الإجمالي", "Total")}</th>
                 </tr>
               </thead>
               <tbody>
-                {lines.map((line, idx) => (
+                {lines.map((line) => (
                   <tr key={line.id}>
-                    <td className="text-center text-xs text-[var(--muted)] font-mono">{idx + 1}</td>
                     <td className="font-bold text-[var(--ink)]">{line.description}</td>
                     <td className="text-center font-bold">{Number(line.quantity).toLocaleString("en-US")}</td>
                     <td className="text-center font-semibold">{Number(line.unitPrice).toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {currency}</td>
+                    <td className="text-center">{Number(line.bonusQuantity).toLocaleString(locale === "en" ? "en-US" : "ar-EG")}</td>
+                    <td className="text-center">{Number(line.discountValue).toLocaleString(locale === "en" ? "en-US" : "ar-EG")}{line.discountType === "percent" ? "%" : ` ${currency}`}</td>
+                    <td className="text-center font-semibold">{(Number(line.unitPrice) - calculateInvoiceLineAmounts(1, Number(line.unitPrice), Number(line.discountValue), line.discountType).discountPerUnit).toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {currency}</td>
                     <td className="text-center font-bold text-[var(--ink)]">
                       {Number(line.lineTotal).toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {currency}
                     </td>
@@ -224,9 +254,15 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
               <span>{text("المجموع قبل الخصم:", "Subtotal before discount:")}</span>
               <b>{Number(invoice.subtotal).toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {currency}</b>
             </p>
+            {itemDiscountTotal > 0 && (
+              <p>
+                <span>{text("خصومات الأصناف:", "Item discounts:")}</span>
+                <b className="text-rose-600">− {itemDiscountTotal.toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {currency}</b>
+              </p>
+            )}
             {Number(invoice.discount) > 0 && (
               <p>
-                <span>{text("الخصم الممنوح:", "Discount:")}</span>
+                <span>{text("الخصم الإضافي:", "Additional discount:")}</span>
                 <b className="text-rose-600">− {Number(invoice.discount).toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {currency}</b>
               </p>
             )}
@@ -291,6 +327,12 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
               </div>
             )}
             <h2 className="text-base font-black">{org?.organizationName ?? "Apex Software"}</h2>
+            {org?.commercialRegistrationNumber && (
+              <p className="text-[10px]">{t("settings.commercialRegistrationNumber", "Commercial registration number")}: {org.commercialRegistrationNumber}</p>
+            )}
+            {org?.taxNumber && (
+              <p className="text-[10px]">{t("settings.taxNumber", "Tax number")}: {org.taxNumber}</p>
+            )}
             <p className="text-[11px] mt-0.5">
               {invoice.type === "sale" ? text("إيصال مبيعات نقدية", "Sales receipt") : text("إيصال توريد", "Purchase receipt")}
             </p>
@@ -312,8 +354,13 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
               <tbody className="divide-y divide-dotted divide-slate-300">
                 {lines.map((l) => (
                   <tr key={l.id}>
-                    <td className="py-1 font-bold">{l.description}</td>
-                    <td className="py-1 text-center font-bold">{l.quantity}</td>
+                    <td className="py-1 font-bold">
+                      {l.description}
+                      <span className="block text-[9px] font-normal">
+                        {formatAmount(l.unitPrice)} − {Number(l.discountValue).toLocaleString(locale === "en" ? "en-US" : "ar-EG")}{l.discountType === "percent" ? "%" : ` ${currency}`} = {formatAmount(Number(l.unitPrice) - calculateInvoiceLineAmounts(1, Number(l.unitPrice), Number(l.discountValue), l.discountType).discountPerUnit)} {currency}
+                      </span>
+                    </td>
+                    <td className="py-1 text-center font-bold">{l.quantity}{Number(l.bonusQuantity) > 0 ? ` + ${l.bonusQuantity} ${text("بونص", "bonus")}` : ""}</td>
                     <td className="py-1 text-left">{formatAmount(l.lineTotal)}</td>
                   </tr>
                 ))}
@@ -326,9 +373,15 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
               <span>{text("المجموع:", "Subtotal:")}</span>
               <span>{formatAmount(invoice.subtotal)} {currency}</span>
             </div>
+            {itemDiscountTotal > 0 && (
+              <div className="flex justify-between text-rose-600">
+                <span>{text("خصومات الأصناف:", "Item discounts:")}</span>
+                <span>−{formatAmount(itemDiscountTotal)} {currency}</span>
+              </div>
+            )}
             {Number(invoice.discount) > 0 && (
               <div className="flex justify-between text-rose-600">
-                <span>{text("الخصم:", "Discount:")}</span>
+                <span>{text("الخصم الإضافي:", "Additional discount:")}</span>
                 <span>−{formatAmount(invoice.discount)} {currency}</span>
               </div>
             )}
@@ -384,6 +437,12 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
               )}
               <div>
                 <h2 className="text-xl font-black text-[var(--ink)]">{text("إذن صرف وتسليم بضاعة من المستودع", "Warehouse dispatch and delivery slip")}</h2>
+                {org?.commercialRegistrationNumber && (
+                  <p className="text-xs text-[var(--muted)]">{t("settings.commercialRegistrationNumber", "Commercial registration number")}: {org.commercialRegistrationNumber}</p>
+                )}
+                {org?.taxNumber && (
+                  <p className="text-xs text-[var(--muted)]">{t("settings.taxNumber", "Tax number")}: {org.taxNumber}</p>
+                )}
                 <p className="text-xs text-[var(--muted)] font-bold">{text("مستند تحضير ومطابقة المخزون والتسليم للعميل", "Document for picking, stock verification, and customer delivery")}</p>
                 {org?.phone && (
                   <p className="text-xs font-semibold text-indigo-700 mt-0.5">📞 {org.phone}</p>
@@ -425,7 +484,12 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
                     <td className="text-center text-xs text-[var(--muted)] font-mono">{idx + 1}</td>
                     <td className="font-bold text-[var(--ink)] text-sm">{line.description}</td>
                     <td className="text-center font-mono font-black text-base text-indigo-700">
-                      {Number(line.quantity).toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {text("قطعة", "pcs")}
+                      {Number(line.quantity).toLocaleString(locale === "en" ? "en-US" : "ar-EG")}
+                      {Number(line.bonusQuantity) > 0 && (
+                        <span className="block text-xs text-emerald-700">
+                          + {Number(line.bonusQuantity).toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {text("بونص", "bonus")}
+                        </span>
+                      )}
                     </td>
                     <td className="text-center text-xs font-semibold text-emerald-700">
                       {text("تم الصرف من المستودع", "Dispatched from warehouse")}

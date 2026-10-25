@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/server/db";
 import { settings } from "@/server/db/schema";
@@ -9,7 +10,7 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
   const [brand] = await db
     .select({
       name: settings.organizationName,
-      updatedAt: settings.updatedAt,
+      logoPath: settings.logoPath,
       locale: settings.locale,
     })
     .from(settings)
@@ -18,7 +19,10 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
   const name = brand?.name ?? "Apex ERP";
   const shortName = name.slice(0, 12) || "Apex ERP";
   const locale = brand?.locale === "en" ? "en" : "ar";
-  const logoVersion = brand?.updatedAt.getTime() ?? 0;
+  const logoVersion = createHash("sha256")
+    .update(brand?.logoPath ?? "")
+    .digest("hex")
+    .slice(0, 16);
 
   return {
     name,

@@ -24,6 +24,7 @@ import { saveInvoice } from "./actions";
 import { CloseDisclosureButton } from "@/components/close-disclosure-button";
 import { useI18n } from "@/lib/i18n-client";
 import { formatAmount, formatAmountInput } from "@/lib/number-format";
+import { calculateInvoiceLineAmounts, calculateInvoiceStockQuantity, calculateInvoiceTotal, type InvoiceDiscountType } from "@/lib/invoice-math";
 
 type Product = {
   id: string;
@@ -60,7 +61,10 @@ type Line = {
   unitName?: string;
   unitFactor?: string;
   quantity: string;
+  bonusQuantity: string;
   unitPrice: string;
+  discountValue: string;
+  discountType: InvoiceDiscountType;
   basePrice?: string;
   minPrice?: string;
 };
@@ -85,6 +89,7 @@ export function InvoiceForm({
   units = [],
   partyBalances = {},
   initial,
+  fullPageEdit = false,
 }: {
   products: Product[];
   parties: Party[];
@@ -92,6 +97,7 @@ export function InvoiceForm({
   units?: Unit[];
   partyBalances?: Record<string, number>;
   initial?: InitialInvoice;
+  fullPageEdit?: boolean;
 }) {
   const { t, locale } = useI18n();
   const text = (ar: string, en: string) => (locale === "en" ? en : ar);
@@ -99,7 +105,7 @@ export function InvoiceForm({
   const [type, setType] = useState<InvoiceType>(initial?.type ?? "sale");
   const [productId, setProductId] = useState(initial?.lines[0]?.productId ?? products[0]?.id ?? "");
   const [quantity, setQuantity] = useState("1");
-  const [lines, setLines] = useState<Line[]>(() => (initial?.lines ?? []).map((line) => ({ ...line, unitPrice: formatAmountInput(Number(line.unitPrice)), basePrice: line.basePrice ? formatAmountInput(Number(line.basePrice)) : undefined, minPrice: line.minPrice ? formatAmountInput(Number(line.minPrice)) : undefined })));
+  const [lines, setLines] = useState<Line[]>(() => (initial?.lines ?? []).map((line) => ({ ...line, bonusQuantity: line.bonusQuantity ?? "0", discountValue: line.discountValue ?? "0", discountType: line.discountType ?? "amount", unitPrice: formatAmountInput(Number(line.unitPrice)), basePrice: line.basePrice ? formatAmountInput(Number(line.basePrice)) : undefined, minPrice: line.minPrice ? formatAmountInput(Number(line.minPrice)) : undefined })));
   const [discount, setDiscount] = useState(formatAmountInput(Number(initial?.discount ?? 0)));
   const [tax, setTax] = useState(initial?.tax ?? "0");
   const [paid, setPaid] = useState(formatAmountInput(Number(initial?.paid ?? 0)));
@@ -114,7 +120,7 @@ export function InvoiceForm({
   const [paymentMode, setPaymentMode] = useState<"cash" | "credit" | "partial">(() => {
     if (initial) {
       const initialTotal =
-        Number(initial.lines.reduce((acc, l) => acc + Number(l.quantity) * Number(l.unitPrice), 0)) -
+        Number(initial.lines.reduce((acc, l) => acc + calculateInvoiceLineAmounts(Number(l.quantity), Number(l.unitPrice), Number(l.discountValue ?? 0), l.discountType ?? "amount").total, 0)) -
         Number(initial.discount || 0);
       const initialPaid = Number(initial.paid || 0);
       if (initialPaid >= initialTotal && initialTotal > 0) return "cash";
@@ -131,6 +137,26 @@ export function InvoiceForm({
       { id: "default-carton", name: "كرتونة", factor: "24" },
     ];
   }, [units]);
+
+  const originalStockByProduct = useMemo(() => {
+    const stock = new Map<string, number>();
+    for (const line of initial?.lines ?? []) {
+      const factor = Number(line.unitFactor) || 1;
+      const quantity = calculateInvoiceStockQuantity(
+        Number(line.quantity) || 0,
+        Number(line.bonusQuantity) || 0,
+        factor
+      );
+      stock.set(line.productId, (stock.get(line.productId) ?? 0) + quantity);
+    }
+    return stock;
+  }, [initial]);
+
+  const availableStockFor = (id: string) => {
+    const currentStock = Number(products.find((product) => product.id === id)?.stock ?? 0);
+    const invoiceStock = type === "sale" ? originalStockByProduct.get(id) ?? 0 : 0;
+    return Math.floor(currentStock + invoiceStock);
+  };
 
   const [selectedUnitId, setSelectedUnitId] = useState<string>(() => {
     const firstProd = products.find((p) => p.id === (initial?.lines[0]?.productId ?? products[0]?.id));
@@ -166,17 +192,31 @@ export function InvoiceForm({
     return lines.reduce((sum, line) => {
       const q = parseFloat(line.quantity) || 0;
       const p = parseFloat(line.unitPrice) || 0;
-      return sum + q * p;
+      return sum + calculateInvoiceLineAmounts(q, p, 0).subtotal;
     }, 0);
   }, [lines]);
+  const lineDiscountTotal = useMemo(() => {
+    return lines.reduce((sum, line) => {
+      const q = parseFloat(line.quantity) || 0;
+      const p = parseFloat(line.unitPrice) || 0;
+      const discountValue = parseFloat(line.discountValue) || 0;
+      return sum + calculateInvoiceLineAmounts(q, p, discountValue, line.discountType).discount;
+    }, 0);
+  }, [lines]);
+  const discountableSubtotal = Math.max(0, subtotal - lineDiscountTotal);
 
   // Initial discount % from initial props
   const [discountPercent, setDiscountPercent] = useState(() => {
     if (initial?.discount && Number(initial.discount) > 0) {
-      const initialSubtotal = (initial.lines ?? []).reduce(
-        (sum, l) => sum + (parseFloat(l.quantity) || 0) * (parseFloat(l.unitPrice) || 0),
-        0
-      );
+      const initialSubtotal = (initial.lines ?? []).reduce((sum, line) => {
+        const amount = calculateInvoiceLineAmounts(
+          Number(line.quantity),
+          Number(line.unitPrice),
+          Number(line.discountValue ?? 0),
+          line.discountType ?? "amount"
+        );
+        return sum + amount.total;
+      }, 0);
       if (initialSubtotal > 0) {
         return ((parseFloat(initial.discount) / initialSubtotal) * 100).toFixed(4);
       }
@@ -194,8 +234,8 @@ export function InvoiceForm({
   const onPercentChange = (pctStr: string) => {
     setDiscountPercent(pctStr);
     const pct = parseNum(pctStr);
-    if (pct > 0 && subtotal > 0) {
-      const calculatedEgp = formatAmountInput(Math.min(subtotal, (subtotal * pct) / 100));
+    if (pct > 0 && discountableSubtotal > 0) {
+      const calculatedEgp = formatAmountInput(Math.min(discountableSubtotal, (discountableSubtotal * pct) / 100));
       setDiscount(calculatedEgp);
     } else if (pctStr === "" || pct === 0) {
       setDiscount("0");
@@ -205,26 +245,20 @@ export function InvoiceForm({
   const onDiscountEgpChange = (egpStr: string) => {
     setDiscount(egpStr);
     const egp = parseNum(egpStr);
-    if (egp > 0 && subtotal > 0) {
-      setDiscountPercent(((egp / subtotal) * 100).toFixed(4));
+    if (egp > 0 && discountableSubtotal > 0) {
+      setDiscountPercent(((egp / discountableSubtotal) * 100).toFixed(4));
     } else if (egpStr === "" || egp === 0) {
       setDiscountPercent("0");
     }
   };
 
-  const discountAmount = discountPercent && parseNum(discountPercent) > 0 && subtotal > 0
-    ? Math.min(subtotal, (subtotal * parseNum(discountPercent)) / 100)
+  const discountAmount = discountPercent && parseNum(discountPercent) > 0 && discountableSubtotal > 0
+    ? Math.min(discountableSubtotal, (discountableSubtotal * parseNum(discountPercent)) / 100)
     : parseNum(discount);
 
   const total = useMemo(() => {
-    const rawLinesTotal = lines.reduce(
-      (sum, line) => sum + Math.round(Number(line.quantity) * Number(line.unitPrice) * 100),
-      0
-    );
-    const rawDiscount = Math.round(discountAmount * 100);
-    const rawTax = Math.round(Number(tax || 0) * 100);
-    return Math.max(0, (rawLinesTotal - rawDiscount + rawTax) / 100);
-  }, [lines, discountAmount, tax]);
+    return calculateInvoiceTotal(subtotal, lineDiscountTotal, discountAmount, Number(tax || 0));
+  }, [subtotal, lineDiscountTotal, discountAmount, tax]);
 
   const selectedParty = parties.find((party) => party.id === partyId);
   const previousBalance = partyBalances[partyId] ?? 0;
@@ -252,8 +286,8 @@ export function InvoiceForm({
       // Stock check for sale and purchase return
       const existingPieces = lines
         .filter((l) => l.productId === found.id)
-        .reduce((sum, l) => sum + (Number(l.quantity) || 0) * (Number(l.unitFactor) || 1), 0);
-      const availablePieces = Math.floor(Number(found.stock));
+        .reduce((sum, l) => sum + calculateInvoiceStockQuantity(Number(l.quantity) || 0, Number(l.bonusQuantity) || 0, Number(l.unitFactor) || 1), 0);
+      const availablePieces = availableStockFor(found.id);
 
       if ((type === "sale" || type === "purchase_return") && existingPieces + factor > availablePieces) {
         setFormError(
@@ -292,7 +326,10 @@ export function InvoiceForm({
             unitName: selectedUnit?.name,
             unitFactor: String(factor),
             quantity: "1",
+            bonusQuantity: "0",
             unitPrice,
+            discountValue: "0",
+            discountType: "amount",
             basePrice: String(basePrice),
             minPrice,
           },
@@ -317,6 +354,71 @@ export function InvoiceForm({
 
   const partyList = parties.filter((p) => p.type === (isCustomerType ? "customer" : "supplier"));
 
+  const updateLineProduct = (index: number, newProductId: string) => {
+    const product = products.find((item) => item.id === newProductId);
+    const target = lines[index];
+    if (!product || !target || target.productId === newProductId) return;
+
+    const unit =
+      availableUnits.find((item) => item.id === product.unitId) ??
+      availableUnits.find((item) => Number(item.factor) === 1) ??
+      availableUnits[0];
+    const factor = Math.max(1, Math.round(Number(unit?.factor ?? 1)) || 1);
+    const otherLinesPieces = lines
+      .filter((line, lineIndex) => lineIndex !== index && line.productId === product.id)
+      .reduce(
+        (sum, line) =>
+          sum +
+          calculateInvoiceStockQuantity(
+            Number(line.quantity) || 0,
+            Number(line.bonusQuantity) || 0,
+            Number(line.unitFactor) || 1
+          ),
+        0
+      );
+    const requestedPieces =
+      otherLinesPieces +
+      calculateInvoiceStockQuantity(
+        Number(target.quantity) || 0,
+        Number(target.bonusQuantity) || 0,
+        factor
+      );
+
+    if ((type === "sale" || type === "purchase_return") && requestedPieces > availableStockFor(product.id)) {
+      setFormError(
+        text(
+          `الكمية المطلوبة تتجاوز رصيد المخزن المتاح للصنف «${product.name}».`,
+          `The requested quantity exceeds the available stock for "${product.name}".`
+        )
+      );
+      return;
+    }
+
+    const basePrice = Number(isCustomerType ? product.salePrice : product.costPrice);
+    const unitPrice = formatAmountInput(basePrice * factor);
+    const minPrice = isCustomerType ? formatAmountInput(Number(product.costPrice) * factor) : "0";
+    setFormError(null);
+    setLines((old) =>
+      old.map((line, lineIndex) =>
+        lineIndex === index
+          ? {
+              ...line,
+              productId: product.id,
+              name: product.name,
+              unitId: unit?.id,
+              unitName: unit?.name ?? text("قطعة", "Piece"),
+              unitFactor: String(factor),
+              unitPrice,
+              discountValue: "0",
+              discountType: "amount",
+              basePrice: String(basePrice),
+              minPrice,
+            }
+          : line
+      )
+    );
+  };
+
   // Add line to invoice with integer validation, stock validation, and price safety
   function addLine() {
     if (!selected) {
@@ -332,12 +434,12 @@ export function InvoiceForm({
 
     const factor = selectedUnitFactor;
     const piecesToAdd = qty * factor;
-    const availableStock = Math.floor(Number(selected.stock));
+    const availableStock = availableStockFor(selected.id);
 
     // Calculate how many pieces of this product are already in the invoice
     const existingInCartPieces = lines
       .filter((l) => l.productId === selected.id)
-      .reduce((sum, l) => sum + (parseInt(l.quantity, 10) || 0) * (Number(l.unitFactor) || 1), 0);
+      .reduce((sum, l) => sum + calculateInvoiceStockQuantity(parseInt(l.quantity, 10) || 0, Number(l.bonusQuantity) || 0, Number(l.unitFactor) || 1), 0);
 
     const totalRequiredPieces = existingInCartPieces + piecesToAdd;
 
@@ -374,7 +476,10 @@ export function InvoiceForm({
         unitName,
         unitFactor: String(factor),
         quantity: String(qty),
+        bonusQuantity: "0",
         unitPrice: price,
+        discountValue: "0",
+        discountType: "amount",
         basePrice: String(baseSelectedPrice),
         minPrice,
       },
@@ -393,14 +498,13 @@ export function InvoiceForm({
 
     const target = lines[index];
     const factor = Number(target.unitFactor) || 1;
-    const prod = products.find((p) => p.id === target.productId);
-    const availableStock = Math.floor(Number(prod?.stock ?? 0));
+    const availableStock = availableStockFor(target.productId);
 
     const otherLinesPieces = lines
       .filter((l, i) => i !== index && l.productId === target.productId)
-      .reduce((sum, l) => sum + (parseInt(l.quantity, 10) || 0) * (Number(l.unitFactor) || 1), 0);
+      .reduce((sum, l) => sum + calculateInvoiceStockQuantity(parseInt(l.quantity, 10) || 0, Number(l.bonusQuantity) || 0, Number(l.unitFactor) || 1), 0);
 
-    const totalPieces = otherLinesPieces + qty * factor;
+    const totalPieces = otherLinesPieces + calculateInvoiceStockQuantity(qty, Number(target.bonusQuantity) || 0, factor);
 
     if ((type === "sale" || type === "purchase_return") && totalPieces > availableStock) {
       setFormError(
@@ -416,31 +520,88 @@ export function InvoiceForm({
     setLines((old) => old.map((item, i) => (i === index ? { ...item, quantity: String(qty) } : item)));
   };
 
-  // Update Line Unit Price with Protection Against Selling Below Unit/Cost Price
-  const updateLinePrice = (index: number, newPriceStr: string) => {
-    const newPrice = parseFloat(newPriceStr);
+  const updateLineBonus = (index: number, newBonusStr: string) => {
+    const normalizedBonus = newBonusStr === "" ? "0" : newBonusStr;
+    const bonus = Number(normalizedBonus);
     const target = lines[index];
-    const factor = Number(target.unitFactor) || 1;
-    const minAllowed = parseFloat(target.minPrice ?? "0");
+    if (!Number.isFinite(bonus) || bonus < 0 || Math.round(bonus * 1000) !== bonus * 1000) {
+      setFormError(text("كمية البونص يجب أن تكون صفرًا أو أكثر وبحد أقصى 3 خانات عشرية.", "Bonus quantity must be zero or greater, with up to 3 decimal places."));
+      return;
+    }
 
-    if (type === "sale") {
-      // Selling price protection: Do not allow selling below unit cost or official unit price
-      if (isNaN(newPrice) || newPrice < minAllowed - 0.005) {
-        setFormError(
-          text(
-            `ممنوع البيع بسعر أقل من سعر التكلفة/الحد الأدنى للوحدة (${formatAmount(minAllowed)} ج.م). لتطبيق تخفيض يرجى استخدام خانة الخصم الرسمية.`,
-            `Sale price cannot be below the unit cost (${formatAmount(minAllowed)} ${currency}). Apply discounts using the invoice discount field.`
-          )
-        );
-        return;
-      }
-    } else if (isNaN(newPrice) || newPrice < 0) {
-      setFormError(text("سعر الوحدة يجب أن يكون رقماً موجباً.", "Unit price must be a positive number."));
+    const availableStock = availableStockFor(target.productId);
+    const totalPieces = lines
+      .filter((line) => line.productId === target.productId)
+      .reduce((sum, line, lineIndex) => {
+        const qty = Number(line.quantity) || 0;
+        const lineBonus = lineIndex === index ? bonus : Number(line.bonusQuantity) || 0;
+        return sum + calculateInvoiceStockQuantity(qty, lineBonus, Number(line.unitFactor) || 1);
+      }, 0);
+
+    if ((type === "sale" || type === "purchase_return") && totalPieces > availableStock) {
+      setFormError(text(
+        `الكمية المطلوبة مع البونص (${totalPieces} قطعة) تتجاوز رصيد المخزن (${availableStock} قطعة) للصنف «${target.name}».`,
+        `Quantity including bonus (${totalPieces} pcs) exceeds available stock (${availableStock} pcs) for "${target.name}".`
+      ));
       return;
     }
 
     setFormError(null);
+    setLines((old) => old.map((line, lineIndex) => lineIndex === index ? { ...line, bonusQuantity: normalizedBonus } : line));
+  };
+
+  const updateLineDiscount = (index: number, newDiscountStr: string) => {
+    const normalizedDiscount = newDiscountStr === "" ? "0" : newDiscountStr;
+    const discountValue = Number(normalizedDiscount);
+    const target = lines[index];
+    const exceedsLimit = target.discountType === "percent"
+      ? discountValue > 100
+      : discountValue > Number(target.unitPrice);
+    if (!Number.isFinite(discountValue) || discountValue < 0 || exceedsLimit || Math.round(discountValue * 100) !== discountValue * 100) {
+      setFormError(text(
+        target.discountType === "percent"
+          ? "نسبة الخصم يجب أن تكون من صفر إلى 100% وبحد أقصى منزلتين عشريتين."
+          : "خصم الوحدة يجب أن يكون من صفر إلى سعر الوحدة وبحد أقصى منزلتين عشريتين.",
+        target.discountType === "percent"
+          ? "Discount percentage must be between 0 and 100%, with up to 2 decimal places."
+          : "Unit discount must be between zero and the unit price, with up to 2 decimal places."
+      ));
+      return;
+    }
+
+    setFormError(null);
+    setLines((old) => old.map((line, lineIndex) => lineIndex === index ? { ...line, discountValue: normalizedDiscount } : line));
+  };
+
+  // Update Line Unit Price with Protection Against Selling Below Unit/Cost Price
+  const updateLinePrice = (index: number, newPriceStr: string) => {
+    const target = lines[index];
+    const newPrice = newPriceStr === "" ? Number.NaN : Number(newPriceStr);
+
+    if (newPriceStr !== "" && (!Number.isFinite(newPrice) || newPrice < 0)) {
+      setFormError(text("سعر الوحدة يجب أن يكون رقماً موجباً.", "Unit price must be a positive number."));
+      return;
+    }
+
     setLines((old) => old.map((item, i) => (i === index ? { ...item, unitPrice: newPriceStr } : item)));
+
+    if (newPriceStr === "") {
+      setFormError(null);
+    } else if (target.discountType === "amount" && newPrice < Number(target.discountValue)) {
+      setFormError(text(
+        "سعر الوحدة لا يمكن أن يكون أقل من الخصم المحدد للصنف.",
+        "Unit price cannot be lower than the item's current discount."
+      ));
+    } else if (type === "sale" && newPrice < Number(target.minPrice ?? 0) - 0.005) {
+      setFormError(
+        text(
+          `ممنوع البيع بسعر أقل من سعر التكلفة/الحد الأدنى للوحدة (${formatAmount(Number(target.minPrice ?? 0))} ج.م). لتطبيق تخفيض يرجى استخدام خانة الخصم الرسمية.`,
+          `Sale price cannot be below the unit cost (${formatAmount(Number(target.minPrice ?? 0))} ${currency}). Apply discounts using the invoice discount field.`
+        )
+      );
+    } else {
+      setFormError(null);
+    }
   };
 
   // Full Pre-Submit Validation of Worst-Case Scenarios
@@ -462,9 +623,31 @@ export function InvoiceForm({
         setFormError(text(`الكمية غير صالحة للصنف «${line.name}». يجب أن تكون 1 أو أكثر.`, `Invalid quantity for "${line.name}". It must be 1 or more.`));
         return;
       }
+      if (!products.some((product) => product.id === line.productId)) {
+        setFormError(
+          text(
+            `الصنف «${line.name}» غير موجود في المخزن حالياً. اختر صنفاً بديلاً قبل حفظ الفاتورة.`,
+            `"${line.name}" is no longer available in inventory. Select a replacement product before saving.`
+          )
+        );
+        return;
+      }
       const p = parseFloat(line.unitPrice);
       if (isNaN(p) || p < 0) {
         setFormError(text(`سعر غير صالح للصنف «${line.name}».`, `Invalid price for "${line.name}".`));
+        return;
+      }
+      const bonus = Number(line.bonusQuantity);
+      if (!Number.isFinite(bonus) || bonus < 0 || Math.round(bonus * 1000) !== bonus * 1000) {
+        setFormError(text(`كمية البونص غير صالحة للصنف «${line.name}».`, `Invalid bonus quantity for "${line.name}".`));
+        return;
+      }
+      const lineDiscount = Number(line.discountValue);
+      const invalidDiscount = line.discountType === "percent"
+      ? lineDiscount > 100
+      : lineDiscount > p;
+      if (!Number.isFinite(lineDiscount) || lineDiscount < 0 || invalidDiscount || Math.round(lineDiscount * 100) !== lineDiscount * 100) {
+        setFormError(text(`الخصم غير صالح للصنف «${line.name}».`, `Invalid discount for "${line.name}".`));
         return;
       }
       if (type === "sale" && p < parseFloat(line.minPrice ?? "0") - 0.005) {
@@ -483,12 +666,12 @@ export function InvoiceForm({
       const neededByProduct = new Map<string, number>();
       for (const line of lines) {
         const factor = Number(line.unitFactor) || 1;
-        const pieces = parseInt(line.quantity, 10) * factor;
+        const pieces = calculateInvoiceStockQuantity(parseInt(line.quantity, 10), Number(line.bonusQuantity || 0), factor);
         neededByProduct.set(line.productId, (neededByProduct.get(line.productId) ?? 0) + pieces);
       }
       for (const [pId, needed] of neededByProduct) {
         const prod = products.find((p) => p.id === pId);
-        const stock = Math.floor(Number(prod?.stock ?? 0));
+        const stock = availableStockFor(pId);
         if (needed > stock) {
           setFormError(
             text(
@@ -527,8 +710,8 @@ export function InvoiceForm({
 
     // 7. Discount cannot exceed subtotal
     const discountNum = discountAmount;
-    if (discountNum > subtotal) {
-      setFormError(text("قيمة الخصم لا يمكن أن تتجاوز إجمالي الفاتورة قبل الخصم.", "Discount cannot exceed the invoice subtotal."));
+    if (discountNum > discountableSubtotal) {
+      setFormError(text("الخصم الإجمالي لا يمكن أن يتجاوز قيمة الأصناف بعد خصوماتها.", "Invoice discount cannot exceed the subtotal after item discounts."));
       return;
     }
 
@@ -586,7 +769,7 @@ export function InvoiceForm({
         <>
           <input type="hidden" name="id" value={initial.id} />
           <input type="hidden" name="type" value={type} />
-          <CloseDisclosureButton title={text("تعديل بيانات الفاتورة", "Edit invoice details")} />
+          {!fullPageEdit && <CloseDisclosureButton title={text("تعديل بيانات الفاتورة", "Edit invoice details")} />}
         </>
       )}
 
@@ -595,10 +778,13 @@ export function InvoiceForm({
         type="hidden"
         name="lines"
         value={JSON.stringify(
-          lines.map(({ productId: id, quantity: qty, unitPrice, unitName, unitFactor }) => ({
+          lines.map(({ productId: id, quantity: qty, bonusQuantity, unitPrice, discountValue, discountType, unitName, unitFactor }) => ({
             productId: id,
             quantity: qty,
+            bonusQuantity,
             unitPrice,
+            discountValue,
+            discountType,
             unitName,
             unitFactor,
           }))
@@ -935,34 +1121,55 @@ export function InvoiceForm({
         <table>
           <thead>
             <tr>
-              <th className="w-4/12">{t("invoices.item", "الصنف")}</th>
-              <th className="w-2/12 text-center">{t("invoices.unitPackage", "الوحدة والتعبئة")}</th>
-              <th className="w-2/12 text-center">{t("invoices.quantity", "الكمية")}</th>
-              <th className="w-2/12 text-center">{t("invoices.unitPrice", "سعر الوحدة")}</th>
-              <th className="w-2/12 text-center">{t("invoices.total", "الإجمالي")}</th>
-              <th className="w-10"></th>
+              <th>{t("invoices.item", "الصنف")}</th>
+              <th className="text-center">{t("invoices.quantity", "الكمية")}</th>
+              <th className="text-center">{text("السعر", "Price")}</th>
+              <th className="text-center">{text("البونص", "Bonus")}</th>
+              <th className="text-center">{text("الخصم", "Discount")}</th>
+              <th className="text-center">{text("السعر بعد الخصم", "Price after discount")}</th>
+              <th className="text-center">{t("invoices.total", "الإجمالي")}</th>
             </tr>
           </thead>
           <tbody>
             {lines.map((line, index) => {
-              const lineTotal = (Number(line.quantity) * Number(line.unitPrice)).toFixed(2);
+              const amounts = calculateInvoiceLineAmounts(Number(line.quantity), Number(line.unitPrice), Number(line.discountValue), line.discountType);
+              const netUnitPrice = amounts.netUnitPrice;
               const factor = Math.round(Number(line.unitFactor ?? 1)) || 1;
-              const totalPieces = (parseInt(line.quantity, 10) || 0) * factor;
+              const totalPieces = calculateInvoiceStockQuantity(parseInt(line.quantity, 10) || 0, Number(line.bonusQuantity) || 0, factor);
 
               return (
                 <tr key={`${line.productId}-${index}`} className="transition-colors">
-                  <td className="font-bold text-[var(--ink)]">
-                    <div>{line.name}</div>
-                    {factor > 1 && (
-                      <span className="text-[10px] text-indigo-700 font-bold block mt-0.5">
-                        {text("عبوة:", "Pack:")} {line.unitName ?? text("كرتونة", "Carton")} ({factor} {text("قطعة", "pcs")})
-                      </span>
-                    )}
-                  </td>
-                  <td className="text-center">
+                  <td className="font-bold text-[var(--ink)] min-w-44">
+                    <div className="flex items-start justify-between gap-2">
+                      <select
+                        aria-label={text("الصنف", "Product")}
+                        className="table-input min-w-0 flex-1 text-xs font-bold"
+                        value={line.productId}
+                        onChange={(e) => updateLineProduct(index, e.target.value)}
+                      >
+                        {!products.some((product) => product.id === line.productId) && (
+                          <option value={line.productId}>
+                            {line.name} ({text("غير موجود بالمخزن", "not in inventory")})
+                          </option>
+                        )}
+                        {products.map((product) => (
+                          <option key={product.id} value={product.id}>
+                            {product.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="danger-link p-1 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg cursor-pointer"
+                        type="button"
+                        title={text("حذف هذا البند من الفاتورة", "Remove this invoice item")}
+                        onClick={() => setLines((old) => old.filter((_, i) => i !== index))}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                     <select
                       aria-label={text("الوحدة والتعبئة", "Unit and packaging")}
-                      className="table-input text-xs font-bold w-full max-w-[130px] mx-auto py-1 px-1.5 text-center"
+                      className="table-input text-xs font-bold w-full max-w-[150px] mt-1 py-1 px-1.5"
                       value={line.unitId ?? ""}
                       onChange={(e) => {
                         const newUnitId = e.target.value;
@@ -973,6 +1180,9 @@ export function InvoiceForm({
                             Number(line.unitPrice) / (Number(line.unitFactor) || 1)
                         );
                         const newPrice = formatAmountInput(baseP * newFactor);
+                        const newDiscount = line.discountType === "percent"
+                          ? line.discountValue
+                          : formatAmountInput(Number(line.discountValue) / (Number(line.unitFactor) || 1) * newFactor);
                         const prod = products.find((p) => p.id === line.productId);
                         const minP = isCustomerType ? formatAmountInput(Number(prod?.costPrice ?? 0) * newFactor) : "0";
 
@@ -985,6 +1195,7 @@ export function InvoiceForm({
                                   unitName: newUnit?.name ?? text("قطعة", "Piece"),
                                   unitFactor: String(newFactor),
                                   unitPrice: newPrice,
+                                  discountValue: newDiscount,
                                   basePrice: String(baseP),
                                   minPrice: minP,
                                 }
@@ -1046,52 +1257,68 @@ export function InvoiceForm({
                   </td>
                   <td>
                     <div className="text-center">
-                      {type === "sale" ? (
-                        <div className="inline-flex flex-col items-center">
-                          <span className="font-mono font-bold text-sm text-[var(--ink)] px-2 py-1 bg-[var(--bg)] border border-[var(--line)] rounded-md">
-                            {formatAmount(line.unitPrice)} {currency}
-                          </span>
-                          <span className="text-[10px] text-emerald-700 font-bold mt-0.5">
-                            {text("سعر الوحدة المعتمد", "Approved unit price")}
-                          </span>
-                        </div>
-                      ) : (
-                        <input
-                          aria-label={t("invoices.unitPrice", "سعر الوحدة")}
-                          className="table-input w-24 text-center font-bold mx-auto font-mono"
-                          type="number"
-                          min="0.01"
-                          step="0.01"
-                          value={line.unitPrice}
-                          onChange={(e) => updateLinePrice(index, e.target.value)}
-                        />
-                      )}
-                      {factor > 1 && (
-                        <span className="block text-[10px] text-[var(--muted)] mt-0.5 font-mono">
-                          ({formatAmount(Number(line.unitPrice) / factor)} {text("ج/قطعة", "EGP/pc")})
+                      <input
+                        aria-label={t("invoices.unitPrice", "سعر الوحدة")}
+                        className="table-input w-24 text-center font-bold mx-auto font-mono"
+                        type="number"
+                        min={type === "sale" ? Number(line.minPrice ?? 0) : 0}
+                        step="0.01"
+                        value={line.unitPrice}
+                        onChange={(e) => updateLinePrice(index, e.target.value)}
+                      />
+                      {type === "sale" && (
+                        <span className="text-[10px] text-emerald-700 font-bold mt-0.5 block">
+                          {text("أقل سعر", "Minimum price")}: {formatAmount(Number(line.minPrice ?? 0))}
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="font-bold text-[var(--ink)] text-center font-mono text-sm">
-                    {formatAmount(lineTotal)} {currency}
+                  <td>
+                    <input
+                      aria-label={text("كمية البونص", "Bonus quantity")}
+                      className="table-input w-20 text-center font-bold mx-auto font-mono"
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      value={line.bonusQuantity}
+                      onChange={(e) => updateLineBonus(index, e.target.value)}
+                    />
                   </td>
-                  <td className="text-center">
-                    <button
-                      className="danger-link p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
-                      type="button"
-                      title={text("حذف هذا البند من الفاتورة", "Remove this invoice item")}
-                      onClick={() => setLines((old) => old.filter((_, i) => i !== index))}
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                  <td>
+                    <div className="space-y-1">
+                      <select
+                        aria-label={t("invoices.discountType", "Discount type")}
+                        className="table-input w-24 text-center text-xs mx-auto"
+                        value={line.discountType}
+                        onChange={(e) => setLines((old) => old.map((item, i) => i === index ? { ...item, discountType: e.target.value === "percent" ? "percent" : "amount" } : item))}
+                      >
+                        <option value="amount">{t("invoices.discountAmount", "Amount")}</option>
+                        <option value="percent">{t("invoices.discountPercentOption", "Percent %")}</option>
+                      </select>
+                      <input
+                        aria-label={text("قيمة الخصم", "Discount value")}
+                        className="table-input w-20 text-center font-bold mx-auto font-mono"
+                        type="number"
+                        min="0"
+                        max={line.discountType === "percent" ? 100 : Number(line.unitPrice)}
+                        step="0.01"
+                        value={line.discountValue}
+                        onChange={(e) => updateLineDiscount(index, e.target.value)}
+                      />
+                    </div>
+                  </td>
+                  <td className="font-bold text-center font-mono text-sm">
+                    {formatAmount(netUnitPrice)} {currency}
+                  </td>
+                  <td className="font-bold text-[var(--ink)] text-center font-mono text-sm whitespace-nowrap">
+                    {formatAmount(amounts.total)} {currency}
                   </td>
                 </tr>
               );
             })}
             {lines.length === 0 && (
               <tr>
-                <td colSpan={6} className="table-empty py-8 text-center text-[var(--muted)]">
+                <td colSpan={7} className="table-empty py-8 text-center text-[var(--muted)]">
                   {t("invoices.emptyLines", "لم يتم إضافة أصناف بعد. اختر المنتج والوحدة والكمية أعلاه لإضافته إلى الفاتورة.")}
                 </td>
               </tr>
@@ -1104,9 +1331,10 @@ export function InvoiceForm({
       <div className="mobile-cards-only space-y-3">
         {lines.length > 0 ? (
           lines.map((line, index) => {
-            const lineTotal = (Number(line.quantity) * Number(line.unitPrice)).toFixed(2);
+            const amounts = calculateInvoiceLineAmounts(Number(line.quantity), Number(line.unitPrice), Number(line.discountValue), line.discountType);
             const factor = Math.round(Number(line.unitFactor ?? 1)) || 1;
-            const totalPieces = (parseInt(line.quantity, 10) || 0) * factor;
+            const totalPieces = calculateInvoiceStockQuantity(parseInt(line.quantity, 10) || 0, Number(line.bonusQuantity) || 0, factor);
+            const netUnitPrice = amounts.netUnitPrice;
 
             return (
               <div
@@ -1116,9 +1344,23 @@ export function InvoiceForm({
                 {/* Header: Name + Delete */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <b className="text-xs font-bold text-[var(--ink)] block truncate">
-                      {line.name}
-                    </b>
+                    <select
+                      aria-label={text("الصنف", "Product")}
+                      className="w-full min-w-0 bg-[var(--bg)] border border-[var(--line-strong)] rounded-lg py-1.5 px-2 text-xs font-bold text-[var(--ink)]"
+                      value={line.productId}
+                      onChange={(e) => updateLineProduct(index, e.target.value)}
+                    >
+                      {!products.some((product) => product.id === line.productId) && (
+                        <option value={line.productId}>
+                          {line.name} ({text("غير موجود بالمخزن", "not in inventory")})
+                        </option>
+                      )}
+                      {products.map((product) => (
+                        <option key={product.id} value={product.id}>
+                          {product.name}
+                        </option>
+                      ))}
+                    </select>
                     {factor > 1 && (
                       <span className="text-[10px] text-indigo-700 font-bold block mt-0.5">
                         {text("عبوة:", "Pack:")} {line.unitName ?? text("كرتونة", "Carton")} ({factor} {text("قطعة", "pcs")})
@@ -1136,7 +1378,7 @@ export function InvoiceForm({
                 </div>
 
                 {/* Controls: Unit Dropdown + Quantity Stepper */}
-                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[var(--line)]/60">
+                <div className="grid grid-cols-3 gap-2 pt-1 border-t border-[var(--line)]/60">
                   <div>
                     <label className="text-[10px] text-[var(--muted)] font-bold block mb-1">
                       {text("الوحدة / التعبئة:", "Unit / packaging:")}
@@ -1154,6 +1396,9 @@ export function InvoiceForm({
                             Number(line.unitPrice) / (Number(line.unitFactor) || 1)
                         );
                         const newPrice = formatAmountInput(baseP * newFactor);
+                        const newDiscount = line.discountType === "percent"
+                          ? line.discountValue
+                          : formatAmountInput(Number(line.discountValue) / (Number(line.unitFactor) || 1) * newFactor);
                         const prod = products.find((p) => p.id === line.productId);
                         const minP = isCustomerType ? formatAmountInput(Number(prod?.costPrice ?? 0) * newFactor) : "0";
 
@@ -1166,6 +1411,7 @@ export function InvoiceForm({
                                   unitName: newUnit?.name ?? text("قطعة", "Piece"),
                                   unitFactor: String(newFactor),
                                   unitPrice: newPrice,
+                                  discountValue: newDiscount,
                                   basePrice: String(baseP),
                                   minPrice: minP,
                                 }
@@ -1223,20 +1469,71 @@ export function InvoiceForm({
                       </button>
                     </div>
                   </div>
+                  <div>
+                    <label className="text-[10px] text-[var(--muted)] font-bold block mb-1 text-center">
+                      {text("البونص", "Bonus")}
+                    </label>
+                    <input
+                      aria-label={text("كمية البونص", "Bonus quantity")}
+                      className="w-full text-center font-bold font-mono py-1.5 text-xs bg-[var(--bg)] border border-[var(--line-strong)] rounded-lg"
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      value={line.bonusQuantity}
+                      onChange={(e) => updateLineBonus(index, e.target.value)}
+                    />
+                  </div>
                 </div>
 
-                {/* Price and Subtotal */}
-                <div className="flex items-center justify-between pt-2 border-t border-[var(--line)]/60 text-xs">
+                {/* Price, discount, and line total */}
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[var(--line)]/60 text-xs">
                   <div>
-                    <span className="text-[10px] text-[var(--muted)] block">{t("invoices.unitPrice", "سعر الوحدة")}:</span>
-                    <span className="font-mono font-bold text-[var(--ink)]">
-                      {formatAmount(line.unitPrice)} {currency}
-                    </span>
+                    <label className="text-[10px] text-[var(--muted)] block">{text("السعر", "Price")}</label>
+                    <input
+                      aria-label={text("السعر", "Price")}
+                      className="table-input w-full text-center font-bold font-mono"
+                      type="number"
+                      min={type === "sale" ? Number(line.minPrice ?? 0) : 0}
+                      step="0.01"
+                      value={line.unitPrice}
+                      onChange={(e) => updateLinePrice(index, e.target.value)}
+                    />
+                    {type === "sale" && (
+                      <span className="text-[10px] text-emerald-700 font-bold mt-1 block">
+                        {text("أقل سعر", "Minimum price")}: {formatAmount(Number(line.minPrice ?? 0))}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-[var(--muted)] block">{text("الخصم", "Discount")}</label>
+                    <select
+                      aria-label={t("invoices.discountType", "Discount type")}
+                      className="table-input w-full text-center text-xs mb-1"
+                      value={line.discountType}
+                      onChange={(e) => setLines((old) => old.map((item, i) => i === index ? { ...item, discountType: e.target.value === "percent" ? "percent" : "amount" } : item))}
+                    >
+                      <option value="amount">{t("invoices.discountAmount", "Amount")}</option>
+                      <option value="percent">{t("invoices.discountPercentOption", "Percent %")}</option>
+                    </select>
+                    <input
+                      aria-label={text("قيمة الخصم", "Discount value")}
+                      className="table-input w-full text-center font-bold font-mono"
+                      type="number"
+                      min="0"
+                      max={line.discountType === "percent" ? 100 : Number(line.unitPrice)}
+                      step="0.01"
+                      value={line.discountValue}
+                      onChange={(e) => updateLineDiscount(index, e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[var(--muted)] block">{text("السعر بعد الخصم", "Price after discount")}</span>
+                    <b className="font-mono font-bold text-[var(--ink)]">{formatAmount(netUnitPrice)} {currency}</b>
                   </div>
                   <div className="text-left">
-                    <span className="text-[10px] text-[var(--muted)] block">{text("إجمالي البند:", "Line total:")}</span>
+                    <span className="text-[10px] text-[var(--muted)] block">{text("الإجمالي:", "Total:")}</span>
                     <b className="font-mono font-black text-sm text-indigo-700">
-                      {formatAmount(lineTotal)} {currency}
+                      {formatAmount(amounts.total)} {currency}
                     </b>
                   </div>
                 </div>
@@ -1310,7 +1607,7 @@ export function InvoiceForm({
         <label>
           <span className="flex items-center justify-between">
             <span className="font-bold text-xs text-[var(--ink)]">{t("invoices.discountPercent", "الخصم (%)")}</span>
-            {subtotal > 0 && <small className="text-[var(--muted)] text-[10px]">{locale === "en" ? `From ${formatAmount(subtotal)}` : `من ${formatAmount(subtotal)} ج.م`}</small>}
+            {discountableSubtotal > 0 && <small className="text-[var(--muted)] text-[10px]">{locale === "en" ? `From ${formatAmount(discountableSubtotal)}` : `من ${formatAmount(discountableSubtotal)} ج.م`}</small>}
           </span>
           <input
             type="number"
@@ -1330,7 +1627,7 @@ export function InvoiceForm({
             name="discount"
             type="number"
             min="0"
-            max={subtotal || undefined}
+            max={discountableSubtotal || undefined}
             step="0.01"
             value={discountAmount === 0 ? "" : formatAmountInput(discountAmount)}
             placeholder="0"

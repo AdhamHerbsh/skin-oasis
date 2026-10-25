@@ -156,7 +156,7 @@ export default async function Home() {
         .where(and(eq(invoices.type, "purchase"), gte(invoices.createdAt, todayStart))),
       db
         .select({
-          profit: sql<string>`coalesce(sum(${invoiceLines.lineTotal} - (${invoiceLines.quantity} * ${invoiceLines.costPrice})), 0)`,
+          profit: sql<string>`coalesce(sum(${invoiceLines.lineTotal} - ((${invoiceLines.quantity} + ${invoiceLines.bonusQuantity}) * ${invoiceLines.costPrice})), 0)`,
         })
         .from(invoiceLines)
         .innerJoin(invoices, eq(invoices.id, invoiceLines.invoiceId))
@@ -208,14 +208,14 @@ export default async function Home() {
           name: products.name,
           sku: products.sku,
           stock: products.stock,
-          soldQty: sql<number>`coalesce(sum(${invoiceLines.quantity}), 0)`,
+          soldQty: sql<number>`coalesce(sum(${invoiceLines.quantity} + ${invoiceLines.bonusQuantity}), 0)`,
         })
         .from(invoiceLines)
         .innerJoin(products, eq(products.id, invoiceLines.productId))
         .innerJoin(invoices, eq(invoices.id, invoiceLines.invoiceId))
         .where(eq(invoices.type, "sale"))
         .groupBy(products.id, products.name, products.sku, products.stock)
-        .orderBy(desc(sql`sum(${invoiceLines.quantity})`))
+        .orderBy(desc(sql`sum(${invoiceLines.quantity} + ${invoiceLines.bonusQuantity})`))
         .limit(4),
     ]);
 
@@ -335,7 +335,7 @@ export default async function Home() {
               {translate("dash.liquidationTitle", locale, "صافي قيمة تصفية المشروع الحالية (حقوق الملكية)")}
             </h2>
             <p className="text-xs text-[var(--muted)] max-w-2xl leading-relaxed">
-              {translate("dash.liquidationExplanation", locale, "يمثل هذا الرقم ما سيؤول إليك كمالك في اللحظة الراهنة بعد استرداد كاش الخزائن وتسييل بضاعة المستودع بسعر التكلفة وتحصيل كافة ديون العملاء وسداد جميع مستحقات الموردين.")}
+              {translate("dash.liquidationExplanation", locale, "يوضح هذا الرقم صافي ما ستحصل عليه كمالك حاليًا، بعد تحصيل النقد من الخزائن، وبيع المخزون بسعر التكلفة، وتحصيل مديونيات العملاء، وسداد مستحقات الموردين.")}
             </p>
           </div>
 
@@ -344,13 +344,13 @@ export default async function Home() {
               <span className="text-xs text-[var(--muted)] font-bold block mb-1">
                 {translate("dash.immediateLiquidationAtCost", locale, "صافي التصفية الفورية (بالتكلفة):")}
               </span>
-              <b className="text-2xl sm:text-3xl md:text-4xl font-black text-indigo-700 font-mono tracking-tight block">
+              <b className="text-2xl sm:text-3xl md:text-4xl font-black text-indigo-700 dashboard-number tracking-tight block">
                 {netLiquidationAtCost.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs sm:text-sm font-bold text-indigo-600/70">{translate("common.egp", locale, "ج.م")}</small>
               </b>
             </div>
             <div className="text-xs text-emerald-800 font-semibold flex items-center justify-between sm:justify-start gap-1.5 bg-emerald-50 border border-emerald-200 px-3.5 py-1.5 rounded-xl">
               <span>{translate("dash.liquidationAtRetail", locale, "التصفية بالبيع القطاعي:")}</span>
-              <b className="text-emerald-700 font-black font-mono text-sm">
+              <b className="text-emerald-700 font-black dashboard-number text-sm">
                 {netLiquidationAtRetail.toLocaleString(localeCode, { maximumFractionDigits: 2 })} {translate("common.egp", locale, "ج.م")}
               </b>
             </div>
@@ -366,7 +366,7 @@ export default async function Home() {
                 <span className="w-5 h-5 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-xs font-black">+</span>
                 <span>{translate("dash.cashboxLiquidity", locale, "سيولة الخزائن الفورية")}</span>
               </span>
-              <b className="text-lg sm:text-xl md:text-2xl font-black text-emerald-800 block mt-1.5 font-mono">
+              <b className="text-lg sm:text-xl md:text-2xl font-black text-emerald-800 block mt-1.5 dashboard-number">
                 {totalCashBalance.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs font-bold text-emerald-700/80">{translate("common.egp", locale, "ج.م")}</small>
               </b>
               <small className="text-[11px] text-emerald-700 font-medium">
@@ -385,7 +385,7 @@ export default async function Home() {
                 <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-900 flex items-center justify-center text-xs font-black">+</span>
                 <span>{translate("dash.inventoryAtCost", locale, "بضاعة المخزن (بالتكلفة)")}</span>
               </span>
-              <b className="text-lg sm:text-xl md:text-2xl font-black text-amber-900 block mt-1.5 font-mono">
+              <b className="text-lg sm:text-xl md:text-2xl font-black text-amber-900 block mt-1.5 dashboard-number">
                 {inventoryCostValuation.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs font-bold text-amber-800/80">{translate("common.egp", locale, "ج.م")}</small>
               </b>
               <small className="text-[11px] text-amber-800 font-medium">
@@ -404,7 +404,7 @@ export default async function Home() {
                 <span className="w-5 h-5 rounded-full bg-sky-200 text-sky-900 flex items-center justify-center text-xs font-black">+</span>
                 <span>{translate("dash.marketReceivables", locale, "فلوسنا بالسوق (آجل العملاء)")}</span>
               </span>
-              <b className="text-lg sm:text-xl md:text-2xl font-black text-sky-900 block mt-1.5 font-mono">
+              <b className="text-lg sm:text-xl md:text-2xl font-black text-sky-900 block mt-1.5 dashboard-number">
                 {customerReceivablesTotal.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs font-bold text-sky-800/80">{translate("common.egp", locale, "ج.م")}</small>
               </b>
               <small className="text-[11px] text-sky-800 font-medium">
@@ -423,7 +423,7 @@ export default async function Home() {
                 <span className="w-5 h-5 rounded-full bg-rose-200 text-rose-900 flex items-center justify-center text-xs font-black">−</span>
                 <span>{translate("dash.supplierPayables", locale, "مستحقات الموردين (علينا)")}</span>
               </span>
-              <b className="text-lg sm:text-xl md:text-2xl font-black text-rose-700 block mt-1.5 font-mono">
+              <b className="text-lg sm:text-xl md:text-2xl font-black text-rose-700 block mt-1.5 dashboard-number">
                 {supplierPayablesTotal.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs font-bold text-rose-600/80">{translate("common.egp", locale, "ج.م")}</small>
               </b>
               <small className="text-[11px] text-rose-800 font-medium">
@@ -448,7 +448,7 @@ export default async function Home() {
             </div>
           </div>
           <div>
-            <b className="text-2xl lg:text-3xl text-blue-900 block font-black font-mono tracking-tight">
+            <b className="text-2xl lg:text-3xl text-blue-900 block font-black dashboard-number tracking-tight">
               {todaySalesTotal.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs text-blue-700/80 font-bold">{translate("common.egp", locale, "ج.م")}</small>
             </b>
             <span className="text-xs text-blue-700 font-semibold block mt-1">
@@ -466,7 +466,7 @@ export default async function Home() {
             </div>
           </div>
           <div>
-            <b className="text-2xl lg:text-3xl text-emerald-800 block font-black font-mono tracking-tight">
+            <b className="text-2xl lg:text-3xl text-emerald-800 block font-black dashboard-number tracking-tight">
               +{todayProfitTotal.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs text-emerald-700/80 font-bold">{translate("common.egp", locale, "ج.م")}</small>
             </b>
             <span className="text-xs text-emerald-800 font-bold block mt-1">
@@ -484,7 +484,7 @@ export default async function Home() {
             </div>
           </div>
           <div>
-            <b className="text-2xl lg:text-3xl text-purple-900 block font-black font-mono tracking-tight">
+            <b className="text-2xl lg:text-3xl text-purple-900 block font-black dashboard-number tracking-tight">
               {todayPurchasesTotal.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs text-purple-700/80 font-bold">{translate("common.egp", locale, "ج.م")}</small>
             </b>
             <span className="text-xs text-purple-700 font-semibold block mt-1">
@@ -502,7 +502,7 @@ export default async function Home() {
             </div>
           </div>
           <div>
-            <b className="text-2xl lg:text-3xl text-teal-900 block font-black font-mono tracking-tight">
+            <b className="text-2xl lg:text-3xl text-teal-900 block font-black dashboard-number tracking-tight">
               {totalCashBalance.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs text-teal-700/80 font-bold">{translate("common.egp", locale, "ج.م")}</small>
             </b>
             <span className="text-xs text-teal-700 font-semibold block mt-1">
@@ -520,7 +520,7 @@ export default async function Home() {
             </div>
           </div>
           <div>
-            <b className="text-2xl lg:text-3xl text-amber-900 block font-black font-mono tracking-tight">
+            <b className="text-2xl lg:text-3xl text-amber-900 block font-black dashboard-number tracking-tight">
               {inventoryCostValuation.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs text-amber-800/80 font-bold">{translate("common.egp", locale, "ج.م")}</small>
             </b>
             <span className="text-xs text-amber-800 font-semibold block mt-1">
@@ -549,7 +549,7 @@ export default async function Home() {
           </div>
           <div>
             <b
-              className={`text-2xl lg:text-3xl block font-black font-mono tracking-tight ${
+              className={`text-2xl lg:text-3xl block font-black dashboard-number tracking-tight ${
                 lowCount > 0 ? "text-rose-700" : "text-emerald-800"
               }`}
             >
@@ -586,7 +586,7 @@ export default async function Home() {
                 </p>
               </div>
             </div>
-            <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+            <span className="text-xs dashboard-number font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
               {locale === "en" ? `Margin: %${todayMarginRate}` : `هامش الربح: %${todayMarginRate}`}
             </span>
           </div>
@@ -623,7 +623,7 @@ export default async function Home() {
               <span className="text-xs text-emerald-900 font-bold block mb-1">
                 {locale === "en" ? "Cash Collected" : "المدفوع نقداً:"}
               </span>
-              <b className="text-xl md:text-2xl font-black text-emerald-800 font-mono block">
+              <b className="text-xl md:text-2xl font-black text-emerald-800 dashboard-number block">
                 {todaySalesPaid.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs font-bold text-emerald-700/80">{translate("common.egp", locale, "ج.م")}</small>
               </b>
             </div>
@@ -631,7 +631,7 @@ export default async function Home() {
               <span className="text-xs text-indigo-900 font-bold block mb-1">
                 {locale === "en" ? "Credit / Remaining" : "المتبقي آجل بالسوق:"}
               </span>
-              <b className="text-xl md:text-2xl font-black text-indigo-800 font-mono block">
+              <b className="text-xl md:text-2xl font-black text-indigo-800 dashboard-number block">
                 {todaySalesCredit.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs font-bold text-indigo-700/80">{translate("common.egp", locale, "ج.م")}</small>
               </b>
             </div>
@@ -681,7 +681,7 @@ export default async function Home() {
                       </span>
                     </div>
                     <div className="text-left shrink-0">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 font-mono">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 dashboard-number">
                         {p.soldQty.toLocaleString(localeCode)} {locale === "en" ? "sold" : "مباع"}
                       </span>
                     </div>
@@ -760,7 +760,7 @@ export default async function Home() {
                         <td className="text-xs text-[var(--muted)] font-mono">
                           {new Date(i.createdAt).toLocaleDateString(localeCode, { month: "short", day: "numeric" })}
                         </td>
-                        <td className="font-bold text-sm text-[var(--ink)] font-mono">
+                        <td className="font-bold text-sm text-[var(--ink)] dashboard-number">
                           {Number(i.total).toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-[10px] text-[var(--muted)] font-normal">{translate("common.egp", locale, "ج.م")}</small>
                         </td>
                         <td>
@@ -827,7 +827,7 @@ export default async function Home() {
                       <span className="font-bold text-xs text-[var(--ink)] truncate max-w-[170px]">
                         {i.partyName ?? (locale === "en" ? "Cash / Walk-in" : "نقدي / صالة")}
                       </span>
-                      <b className="font-black text-sm text-[var(--ink)] font-mono">
+                      <b className="font-black text-sm text-[var(--ink)] dashboard-number">
                         {Number(i.total).toLocaleString(localeCode, { maximumFractionDigits: 2 })} {translate("common.egp", locale, "ج.م")}
                       </b>
                     </div>
@@ -900,7 +900,7 @@ export default async function Home() {
                     </div>
                   </div>
                   <div className="text-left">
-                    <b className="text-sm font-bold text-emerald-700 block font-mono">
+                    <b className="text-sm font-bold text-emerald-700 block dashboard-number">
                       {box.balance.toLocaleString(localeCode, { maximumFractionDigits: 2 })} {translate("common.egp", locale, "ج.م")}
                     </b>
                   </div>
@@ -937,7 +937,7 @@ export default async function Home() {
                         {locale === "en" ? `Reorder level: ${Number(p.reorderLevel).toLocaleString(localeCode)} pcs` : `حد الطلب: ${Number(p.reorderLevel).toLocaleString(localeCode)} قطعة`}
                       </small>
                     </div>
-                    <span className="status stock-low font-mono text-xs font-bold">
+                    <span className="status stock-low dashboard-number text-xs font-bold">
                       {locale === "en" ? `Remaining: ${Number(p.stock).toLocaleString(localeCode)}` : `المتبقي: ${Number(p.stock).toLocaleString(localeCode)}`}
                     </span>
                   </div>

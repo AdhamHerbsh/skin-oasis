@@ -81,8 +81,8 @@ export default async function ReportsPage({
       .select({
         name: sql<string>`coalesce(${categories.name}, ${locale === "en" ? "Uncategorized" : "بدون تصنيف"})`,
         revenue: sql<string>`coalesce(sum(${invoiceLines.lineTotal}), 0)`,
-        cost: sql<string>`coalesce(sum(${invoiceLines.quantity} * ${invoiceLines.costPrice}), 0)`,
-        quantity: sql<string>`coalesce(sum(${invoiceLines.quantity}), 0)`,
+        cost: sql<string>`coalesce(sum((${invoiceLines.quantity} + ${invoiceLines.bonusQuantity}) * ${invoiceLines.costPrice}), 0)`,
+        quantity: sql<string>`coalesce(sum(${invoiceLines.quantity} + ${invoiceLines.bonusQuantity}), 0)`,
         count: sql<number>`count(distinct ${invoiceLines.invoiceId})`,
       })
       .from(invoiceLines)
@@ -96,9 +96,9 @@ export default async function ReportsPage({
     db
       .select({
         name: invoiceLines.description,
-        quantity: sql<string>`coalesce(sum(${invoiceLines.quantity}), 0)`,
+        quantity: sql<string>`coalesce(sum(${invoiceLines.quantity} + ${invoiceLines.bonusQuantity}), 0)`,
         revenue: sql<string>`coalesce(sum(${invoiceLines.lineTotal}), 0)`,
-        cost: sql<string>`coalesce(sum(${invoiceLines.quantity} * ${invoiceLines.costPrice}), 0)`,
+        cost: sql<string>`coalesce(sum((${invoiceLines.quantity} + ${invoiceLines.bonusQuantity}) * ${invoiceLines.costPrice}), 0)`,
       })
       .from(invoiceLines)
       .innerJoin(invoices, eq(invoices.id, invoiceLines.invoiceId))

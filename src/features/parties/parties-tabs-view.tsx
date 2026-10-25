@@ -79,7 +79,8 @@ function ledgerKindLabel(kind: string, locale: "ar" | "en") {
       opening: "Opening balance",
     },
   };
-  return labels[locale][kind as keyof (typeof labels)["en"]] ?? kind;
+  return labels[locale][kind as keyof (typeof labels)["en"]] ??
+    (locale === "ar" ? "حركة حساب أخرى" : "Other account transaction");
 }
 
 type TabKey = "all" | "customers" | "suppliers" | "debtors" | "statement";
@@ -118,6 +119,10 @@ export function PartiesTabsView({
   const { t, locale, isRtl } = useI18n();
   const text = (ar: string, en: string) => (locale === "en" ? en : ar);
   const currency = locale === "en" ? "EGP" : "ج.م";
+  const formatStatementAmount = (value: string | number) =>
+    Number(value).toLocaleString(locale === "en" ? "en-US" : "ar-EG", {
+      maximumFractionDigits: 2,
+    });
 
   const canCheck = (action: string) => {
     if (typeof can === "function") return can(action);
@@ -950,11 +955,15 @@ export function PartiesTabsView({
                               </span>
                             </td>
                             <td className="p-2 text-xs text-slate-600 font-semibold">{row.notes ?? "—"}</td>
-                            <td className="p-2 text-center font-black text-rose-600 font-mono">
-                              {Number(row.debit) > 0 ? `$                              {Number(row.debit).toLocaleString("en-US")} {text("ج.م", "EGP")}` : "—"}
+                            <td className="p-2 text-center font-black text-rose-600">
+                              {Number(row.debit) !== 0
+                                ? `${formatStatementAmount(row.debit)} ${currency}`
+                                : "—"}
                             </td>
-                            <td className="p-2 text-center font-black text-emerald-700 font-mono">
-                              {Number(row.credit) > 0 ? `$                              {Number(row.credit).toLocaleString("en-US")} {text("ج.م", "EGP")}` : "—"}
+                            <td className="p-2 text-center font-black text-emerald-700">
+                              {Number(row.credit) !== 0
+                                ? `${formatStatementAmount(row.credit)} ${currency}`
+                                : "—"}
                             </td>
                             <td className="p-2 text-center font-black text-slate-900 font-mono">
                               {Math.abs(row.balance).toLocaleString("en-US", { maximumFractionDigits: 2 })} {text("ج.م", "EGP")}
@@ -1222,11 +1231,15 @@ export function PartiesTabsView({
                             </td>
                             <td className="text-[11px] font-black">{ledgerKindLabel(row.kind, locale)}</td>
                             <td className="text-[11px] text-[var(--muted)] font-bold">{row.notes ?? "—"}</td>
-                            <td className="text-center text-[11px] font-black text-rose-600 font-mono">
-                              {Number(row.debit) > 0 ? Number(row.debit).toLocaleString("en-US") : "—"}
+                            <td className="text-center text-[11px] font-black text-rose-600">
+                              {Number(row.debit) !== 0
+                                ? `${formatStatementAmount(row.debit)} ${currency}`
+                                : "—"}
                             </td>
-                            <td className="text-center text-[11px] font-black text-emerald-700 font-mono">
-                              {Number(row.credit) > 0 ? Number(row.credit).toLocaleString("en-US") : "—"}
+                            <td className="text-center text-[11px] font-black text-emerald-700">
+                              {Number(row.credit) !== 0
+                                ? `${formatStatementAmount(row.credit)} ${currency}`
+                                : "—"}
                             </td>
                             <td className="text-center text-[11px] font-black font-mono">
                               {Math.abs(row.balance).toLocaleString("en-US", { maximumFractionDigits: 2 })}
