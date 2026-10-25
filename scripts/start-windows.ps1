@@ -196,8 +196,12 @@ try {
 
   # 4. Run database migrations
   $migrateScript = Join-Path $projectRoot "scripts\migrate-runtime.mjs"
-  if (Test-Path $migrateScript) {
-    & $node $migrateScript
+  if (-not (Test-Path $migrateScript)) {
+    throw "ملف ترحيل قاعدة البيانات غير موجود. أعد تجهيز حزمة النظام من ملفات المشروع الكاملة."
+  }
+  & $node $migrateScript
+  if ($LASTEXITCODE -ne 0) {
+    throw "فشل تحديث قاعدة البيانات. لم يتم تشغيل النظام لتجنب أخطاء الصفحات أو تلف البيانات."
   }
 
   # 5. Seed initial admin account
