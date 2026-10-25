@@ -4,3 +4,6 @@ CREATE TABLE IF NOT EXISTS "login_attempts" (
   "window_started_at" timestamp with time zone DEFAULT now() NOT NULL,
   "blocked_until" timestamp with time zone
 );
+
+--> statement-breakpoint
+ALTER TABLE "settings" ADD COLUMN "phone" varchar(40);
