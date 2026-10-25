@@ -89,6 +89,10 @@ export default async function SettingsPage({
             العملة الافتراضية
             <input name="currency" defaultValue={row?.currency ?? "EGP"} required maxLength={8} />
           </label>
+          <label>
+            رقم هاتف المتجر (يظهر في الفواتير)
+            <input name="phone" type="tel" defaultValue={row?.phone ?? ""} maxLength={40} placeholder="مثال: 01012345678 أو +20 10 1234 5678" />
+          </label>
           <input type="hidden" name="taxRate" value="0" />
           <label className="wide-field">
             شعار المتجر (PNG / JPG / WebP • حتى 10MB)

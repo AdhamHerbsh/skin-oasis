@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Boxes,
   CheckCircle2,
+  Download,
   FilePlus,
   FileText,
   Landmark,
@@ -315,10 +316,10 @@ export default async function Home() {
             <FilePlus size={16} />
             <span>{translate("dash.newInvoiceShortcut", locale, "فاتورة جديدة")}</span>
           </Link>
-          <div className="date-pill">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>{translate("dash.liveSystem", locale, "نظام مباشر")}</span>
-          </div>
+          <a href="/api/download" download className="secondary flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg cursor-pointer">
+            <Download size={14} />
+            <span>{translate("dash.downloadApp", locale, "تحميل التطبيق")}</span>
+          </a>
         </div>
       </header>
 

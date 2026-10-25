@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Tajawal } from "next/font/google";
 import "./globals.css";
 import { PageTransition } from "@/components/page-transition";
 import { AppNavigation } from "@/components/app-navigation";
@@ -24,6 +25,14 @@ export const metadata: Metadata = {
 };
 
 import { I18nProvider, Locale } from "@/lib/i18n-client";
+
+const tajawal = Tajawal({
+  subsets: ["arabic", "latin"],
+  weight: ["400", "500", "700", "800", "900"],
+  variable: "--font-tajawal",
+  display: "swap",
+  preload: true,
+});
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   let organizationName = "Apex Software 2",
@@ -70,7 +79,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <html lang={locale} dir={locale === "en" ? "ltr" : "rtl"} data-theme={theme} data-accent={accent}>
+    <html lang={locale} dir={locale === "en" ? "ltr" : "rtl"} data-theme={theme} data-accent={accent} className={tajawal.variable}>
       <body>
         <I18nProvider locale={locale}>
           <AppNavigation

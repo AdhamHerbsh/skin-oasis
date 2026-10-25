@@ -200,9 +200,9 @@ body {
   margin: 0;
   background-color: var(--bg);
   color: var(--ink);
-  font-family: 'Cairo', system-ui, -apple-system, 'Segoe UI', Roboto, Tahoma, sans-serif;
-  font-size: 13.5px;
-  line-height: 1.55;
+  font-family: var(--font-tajawal), 'Cairo', system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
