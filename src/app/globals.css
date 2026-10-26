@@ -1779,7 +1779,7 @@ tbody tr:hover td {
   .invoice-paper .invoice-items-table th:nth-child(1),
   .invoice-paper .invoice-items-table td:nth-child(1) { width: 4%; }
   .invoice-paper .invoice-items-table th:nth-child(2),
-  .invoice-paper .invoice-items-table td:nth-child(2) { width: 40%; }
+  .invoice-paper .invoice-items-table td:nth-child(2) { width: 35%; }
   .invoice-paper .invoice-items-table th:nth-child(3),
   .invoice-paper .invoice-items-table td:nth-child(3) { width: 7%; }
   .invoice-paper .invoice-items-table th:nth-child(4),
@@ -2371,7 +2371,7 @@ html, body {
   .invoice-paper-a5 .invoice-items-table th:nth-child(1),
   .invoice-paper-a5 .invoice-items-table td:nth-child(1) { width: 4%; }
   .invoice-paper-a5 .invoice-items-table th:nth-child(2),
-  .invoice-paper-a5 .invoice-items-table td:nth-child(2) { width: 40%; }
+  .invoice-paper-a5 .invoice-items-table td:nth-child(2) { width: 35%; }
   .invoice-paper-a5 .invoice-items-table th:nth-child(3),
   .invoice-paper-a5 .invoice-items-table td:nth-child(3) { width: 7%; }
   .invoice-paper-a5 .invoice-items-table th:nth-child(4),
