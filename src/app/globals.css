@@ -1799,6 +1799,10 @@ tbody tr:hover td {
     line-height: 1.1 !important;
   }
 
+  .invoice-paper .invoice-items-table tbody td {
+    padding-block: 5px !important;
+  }
+
   .invoice-paper tr {
     break-inside: avoid;
   }
@@ -2398,6 +2402,10 @@ html, body {
     line-height: 1.1 !important;
     white-space: normal !important;
     overflow-wrap: anywhere;
+  }
+
+  .invoice-paper-a5 .invoice-items-table tbody td {
+    padding-block: 3px !important;
   }
 
   .invoice-paper-a5 .invoice-totals {
