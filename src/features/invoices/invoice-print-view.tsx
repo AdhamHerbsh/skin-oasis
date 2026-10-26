@@ -89,10 +89,9 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
 
   const handlePrint = (mode: "a4" | "a5" | "thermal" | "dispatch") => {
     document.documentElement.classList.toggle("thermal-print", mode === "thermal");
-    document.documentElement.classList.toggle("invoice-a5-print", mode === "a5");
     window.print();
     window.setTimeout(() => {
-      document.documentElement.classList.remove("thermal-print", "invoice-a5-print");
+      document.documentElement.classList.remove("thermal-print");
     }, 1000);
   };
 
@@ -232,11 +231,11 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
 
           {/* Table */}
           <div className="table-wrap my-6">
-            <table>
+            <table className="invoice-items-table">
               <thead>
                 <tr>
                   <th className="text-center w-10">#</th>
-                  <th>{text("اسم الصنف والبيان", "Item description")}</th>
+                  <th>{text("الصنف", "Item")}</th>
                   <th className="text-center w-28">{text("الكمية", "Quantity")}</th>
                   <th className="text-center w-32">{text("سعر الوحدة", "Unit price")}</th>
                   <th className="text-center w-24">{text("البونص", "Bonus")}</th>
@@ -336,7 +335,7 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
           FORMAT 2: 80mm Thermal Receipt POS
           ========================================================================= */}
       {format === "thermal" && (
-        <article className="panel max-w-[340px] mx-auto p-4 font-mono text-xs bg-white text-black border border-slate-300 shadow-md">
+        <article className="panel thermal-receipt max-w-[340px] mx-auto p-4 font-mono text-xs bg-white text-black border border-slate-300 shadow-md">
           <div className="text-center pb-3 border-b border-dashed border-black">
             {invoiceLogo && (
               <div className="flex justify-center mb-2">
@@ -367,7 +366,7 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
           </div>
 
           <div className="py-2 border-b border-dashed border-black">
-            <table className="w-full text-[11px]">
+            <table className="thermal-receipt-table w-full text-[11px]">
               <thead>
                 <tr className="border-b border-slate-400">
                   <th className="text-right py-1">{text("الصنف", "Item")}</th>
@@ -442,7 +441,7 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
           FORMAT 3: Warehouse Dispatch Slip (إذن صرف وتسليم مستودع)
           ========================================================================= */}
       {format === "dispatch" && (
-        <article className="panel invoice-paper p-6 md:p-8">
+        <article className="panel invoice-paper dispatch-paper p-6 md:p-8">
           <header className="paper-header pb-4 border-b-2 border-slate-900">
             <div className="flex items-center gap-3">
               {invoiceLogo ? (
@@ -489,7 +488,7 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
 
           {/* Warehouse Checklist Table */}
           <div className="table-wrap my-6">
-            <table>
+            <table className="dispatch-items-table">
               <thead>
                 <tr className="bg-slate-50 text-slate-700">
                   <th className="w-16 text-center">{text("فحص", "Check")}</th>
