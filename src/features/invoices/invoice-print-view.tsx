@@ -62,8 +62,12 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
   const { t, locale } = useI18n();
   const text = (ar: string, en: string) => (locale === "en" ? en : ar);
   const currency = locale === "en" ? "EGP" : "ج.م";
-  const [format, setFormat] = useState<"a4" | "thermal" | "dispatch">("a4");
+  const [format, setFormat] = useState<"a4" | "a5" | "thermal" | "dispatch">("a4");
   const { invoice, party, org, lines, invoiceLogo } = data;
+  const totalQuantity = lines.reduce(
+    (sum, line) => sum + Number(line.quantity) + Number(line.bonusQuantity),
+    0
+  );
   const itemDiscountTotal = lines.reduce(
     (sum, line) =>
       sum + calculateInvoiceLineAmounts(
@@ -83,15 +87,12 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
     minute: "2-digit",
   });
 
-  const handlePrint = (mode: "a4" | "thermal" | "dispatch") => {
-    if (mode === "thermal") {
-      document.documentElement.classList.add("thermal-print");
-    } else {
-      document.documentElement.classList.remove("thermal-print");
-    }
+  const handlePrint = (mode: "a4" | "a5" | "thermal" | "dispatch") => {
+    document.documentElement.classList.toggle("thermal-print", mode === "thermal");
+    document.documentElement.classList.toggle("invoice-a5-print", mode === "a5");
     window.print();
     window.setTimeout(() => {
-      document.documentElement.classList.remove("thermal-print");
+      document.documentElement.classList.remove("thermal-print", "invoice-a5-print");
     }, 1000);
   };
 
@@ -111,6 +112,19 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
           >
             <FileText size={14} />
             <span>{t("invoices.formatA4", "فاتورة رسمية A4")}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFormat("a5")}
+            className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 cursor-pointer font-bold ${
+              format === "a5"
+                ? "bg-[var(--primary)] text-white shadow-xs"
+                : "text-[var(--muted)] hover:text-[var(--ink)]"
+            }`}
+          >
+            <FileText size={14} />
+            <span>{t("invoices.formatA5", "فاتورة A5")}</span>
           </button>
 
           <button
@@ -153,10 +167,10 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
       </div>
 
       {/* =========================================================================
-          FORMAT 1: A4 Commercial Tax Invoice
+          FORMAT 1: A4 / A5 Commercial Tax Invoice
           ========================================================================= */}
-      {format === "a4" && (
-        <article className="panel invoice-paper p-4 sm:p-6 md:p-8">
+      {(format === "a4" || format === "a5") && (
+        <article className={`panel invoice-paper p-4 sm:p-6 md:p-8${format === "a5" ? " invoice-paper-a5" : ""}`}>
           <header className="paper-header pb-6 border-b border-[var(--line)]">
             <div className="flex items-center gap-4">
               {invoiceLogo ? (
@@ -221,6 +235,7 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
             <table>
               <thead>
                 <tr>
+                  <th className="text-center w-10">#</th>
                   <th>{text("اسم الصنف والبيان", "Item description")}</th>
                   <th className="text-center w-28">{text("الكمية", "Quantity")}</th>
                   <th className="text-center w-32">{text("سعر الوحدة", "Unit price")}</th>
@@ -231,8 +246,9 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
                 </tr>
               </thead>
               <tbody>
-                {lines.map((line) => (
+                {lines.map((line, index) => (
                   <tr key={line.id}>
+                    <td className="text-center font-mono">{index + 1}</td>
                     <td className="font-bold text-[var(--ink)]">{line.description}</td>
                     <td className="text-center font-bold">{Number(line.quantity).toLocaleString("en-US")}</td>
                     <td className="text-center font-semibold">{Number(line.unitPrice).toLocaleString(locale === "en" ? "en-US" : "ar-EG")} {currency}</td>
@@ -245,6 +261,14 @@ export function InvoicePrintView({ data }: { data: InvoiceData }) {
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr className="invoice-item-summary">
+                  <td colSpan={2}>{text("إجمالي عدد الأصناف", "Total items")}</td>
+                  <td className="text-center">{lines.length.toLocaleString(locale === "en" ? "en-US" : "ar-EG")}</td>
+                  <td colSpan={4} className="text-center">{text("إجمالي الكميات شامل البونص", "Total quantity incl. bonus")}</td>
+                  <td className="text-center">{totalQuantity.toLocaleString(locale === "en" ? "en-US" : "ar-EG")}</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
 

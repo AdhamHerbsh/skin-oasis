@@ -2074,6 +2074,107 @@ html, body {
   background: var(--panel);
 }
 
+@page invoice-a5 {
+  size: A5 portrait;
+  margin: 6mm;
+}
+
+html.invoice-a5-print {
+  page: invoice-a5;
+}
+
+@media print {
+  .invoice-paper .invoice-item-summary td {
+    border-top: 1px solid #0f172a !important;
+    border-bottom: 1px solid #0f172a !important;
+    font-weight: 800 !important;
+  }
+
+  .invoice-paper-a5 {
+    page: invoice-a5;
+    font-size: 7pt !important;
+  }
+
+  .invoice-paper-a5 .paper-header {
+    flex-direction: column !important;
+    gap: 6px !important;
+  }
+
+  .invoice-paper-a5 .paper-header h2 {
+    font-size: 14px !important;
+  }
+
+  .invoice-paper-a5 .paper-meta {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2px 6px;
+    font-size: 8px;
+    text-align: right;
+  }
+
+  .invoice-paper-a5 .paper-meta strong,
+  .invoice-paper-a5 .paper-meta > div {
+    grid-column: 1 / -1;
+  }
+
+  .invoice-paper-a5 .table-wrap {
+    margin-block: 5px !important;
+  }
+
+  .invoice-paper-a5 table {
+    table-layout: fixed;
+    font-size: 7px !important;
+  }
+
+  .invoice-paper-a5 th,
+  .invoice-paper-a5 td {
+    padding: 2px 2px !important;
+    line-height: 1.1 !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+  }
+
+  .invoice-paper-a5 th:nth-child(1),
+  .invoice-paper-a5 td:nth-child(1) { width: 4%; }
+  .invoice-paper-a5 th:nth-child(2),
+  .invoice-paper-a5 td:nth-child(2) { width: 22%; }
+  .invoice-paper-a5 th:nth-child(3),
+  .invoice-paper-a5 td:nth-child(3) { width: 10%; }
+  .invoice-paper-a5 th:nth-child(4),
+  .invoice-paper-a5 td:nth-child(4) { width: 13%; }
+  .invoice-paper-a5 th:nth-child(5),
+  .invoice-paper-a5 td:nth-child(5) { width: 8%; }
+  .invoice-paper-a5 th:nth-child(6),
+  .invoice-paper-a5 td:nth-child(6) { width: 11%; }
+  .invoice-paper-a5 th:nth-child(7),
+  .invoice-paper-a5 td:nth-child(7) { width: 16%; }
+  .invoice-paper-a5 th:nth-child(8),
+  .invoice-paper-a5 td:nth-child(8) { width: 16%; }
+
+  .invoice-paper-a5 .invoice-totals {
+    width: 65%;
+    font-size: 8px !important;
+  }
+
+  .invoice-paper-a5 > .grid {
+    margin-top: 8px !important;
+    gap: 8px !important;
+    padding-top: 4px !important;
+    font-size: 8px !important;
+  }
+
+  .invoice-paper-a5 > .grid p {
+    margin-bottom: 5px !important;
+  }
+
+  .invoice-paper-a5 .paper-footer {
+    margin-top: 5px !important;
+    padding-top: 4px !important;
+    font-size: 8px !important;
+  }
+}
+
 .role-create-editor[open] > .role-create-form {
   width: min(96vw, 900px);
   max-width: 900px;
