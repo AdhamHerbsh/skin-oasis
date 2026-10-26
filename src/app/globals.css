@@ -2330,8 +2330,9 @@ html, body {
   }
 
   .invoice-paper-a5 .paper-header {
-    flex-direction: column !important;
-    gap: 6px !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
   }
 
   .invoice-paper-a5 .paper-header h2 {
@@ -2340,18 +2341,14 @@ html, body {
   }
 
   .invoice-paper-a5 .paper-meta {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 2px 6px;
+    width: auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
     font-size: 8px;
     font-size: clamp(6pt, 0.65cqw, 8pt);
-    text-align: right;
-  }
-
-  .invoice-paper-a5 .paper-meta strong,
-  .invoice-paper-a5 .paper-meta > div {
-    grid-column: 1 / -1;
+    text-align: left;
   }
 
   .invoice-paper-a5 .table-wrap {
@@ -2361,6 +2358,15 @@ html, body {
   .invoice-paper-a5 table {
     table-layout: fixed;
     font-size: 7px !important;
+  }
+
+  .invoice-paper-a5 .invoice-items-table th {
+    font-size: 6px !important;
+    font-size: clamp(5pt, 0.6cqw, 6.5pt) !important;
+    line-height: 1 !important;
+    padding: 1px !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
   }
 
   .invoice-paper.invoice-paper-a5 .invoice-items-table {
