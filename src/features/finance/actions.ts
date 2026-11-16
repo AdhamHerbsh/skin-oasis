@@ -30,14 +30,38 @@ export async function updateCashbox(formData: FormData) {
 }
 
 export async function deactivateCashbox(formData: FormData) {
-  await requirePermission("finance", "delete");
+  const userId = await requirePermission("finance", "delete");
   const id = zUuid.parse(formData.get("id"));
   await db.transaction(async (tx) => {
     const [box] = await tx.select({ id: cashboxes.id, active: cashboxes.active }).from(cashboxes).where(eq(cashboxes.id, id)).for("update").limit(1);
     if (!box || !box.active) throw new Error("CASHBOX_NOT_FOUND");
+    const boxTransactions = await tx
+      .select({ id: cashTransactions.id, transferId: cashTransactions.transferId })
+      .from(cashTransactions)
+      .where(eq(cashTransactions.cashboxId, id))
+      .for("update");
+    const transferIds = [...new Set(boxTransactions.flatMap((transaction) => transaction.transferId ? [transaction.transferId] : []))];
+    const transferTransactions = transferIds.length
+      ? await tx
+          .select({ id: cashTransactions.id })
+          .from(cashTransactions)
+          .where(inArray(cashTransactions.transferId, transferIds))
+          .for("update")
+      : [];
+    const transactionIds = [...new Set([...boxTransactions.map((transaction) => transaction.id), ...transferTransactions.map((transaction) => transaction.id)])];
+    if (transactionIds.length) {
+      await tx.delete(cashTransactions).where(inArray(cashTransactions.id, transactionIds));
+    }
     await tx.update(cashboxes).set({ active: false }).where(eq(cashboxes.id, id));
+    await tx.insert(auditLogs).values({
+      userId,
+      action: "delete",
+      entity: "cashbox",
+      entityId: id,
+      details: { deletedTransactionIds: transactionIds },
+    });
   });
-  revalidatePath("/finance"); revalidatePath("/");
+  revalidatePath("/finance"); revalidatePath("/reports"); revalidatePath("/parties"); revalidatePath("/statements"); revalidatePath("/");
 }
 
 export async function addCashTransaction(formData: FormData) {
@@ -67,13 +91,27 @@ export async function deleteCashTransaction(formData: FormData) {
       .for("update")
       .limit(1);
     if (!transaction) throw new Error("CASH_TRANSACTION_NOT_FOUND");
-    if (
-      transaction.invoiceId ||
-      transaction.partyId ||
-      transaction.kind === "invoice_payment" ||
-      transaction.kind === "party_payment"
-    ) {
+    if (transaction.invoiceId || transaction.kind === "invoice_payment") {
       throw new Error("CASH_TRANSACTION_LINKED");
+    }
+    let partyPaymentLedgerId: string | null = null;
+    if (transaction.partyId || transaction.kind === "party_payment") {
+      if (!transaction.partyId || !["party_payment", "expense"].includes(transaction.kind)) {
+        throw new Error("CASH_TRANSACTION_LINKED");
+      }
+      const [ledgerEntry] = await tx
+        .select({ id: partyLedger.id })
+        .from(partyLedger)
+        .where(
+          and(
+            eq(partyLedger.cashTransactionId, transaction.id),
+            eq(partyLedger.partyId, transaction.partyId),
+            eq(partyLedger.kind, "payment"),
+          ),
+        )
+        .limit(1);
+      if (!ledgerEntry) throw new Error("CASH_TRANSACTION_LINKED");
+      partyPaymentLedgerId = ledgerEntry.id;
     }
     if (
       (transaction.kind === "transfer_in" || transaction.kind === "transfer_out") &&
@@ -127,6 +165,9 @@ export async function deleteCashTransaction(formData: FormData) {
       }
     }
 
+    if (partyPaymentLedgerId) {
+      await tx.delete(partyLedger).where(eq(partyLedger.id, partyPaymentLedgerId));
+    }
     await tx.delete(cashTransactions).where(inArray(cashTransactions.id, removeIds));
     await tx.insert(auditLogs).values({
       userId,
@@ -183,8 +224,11 @@ export async function registerPartyPayment(formData: FormData) {
       const txs = await tx.select({ kind: cashTransactions.kind, amount: cashTransactions.amount }).from(cashTransactions).where(eq(cashTransactions.cashboxId, cashbox.id));
       if (cashboxBalance(cashbox.openingBalance, txs) < input.amount) throw new Error("INSUFFICIENT_CASHBOX_BALANCE");
     }
-    await tx.insert(partyLedger).values({ partyId: party.id, kind: "payment", debit: party.type === "supplier" ? input.amount.toFixed(2) : "0", credit: party.type === "customer" ? input.amount.toFixed(2) : "0", notes: input.notes || "دفعة حساب" });
-    await tx.insert(cashTransactions).values({ cashboxId: cashbox.id, kind: party.type === "customer" ? "party_payment" : "expense", amount: input.amount.toFixed(2), category: party.type === "customer" ? "تحصيل من عميل" : "سداد مورد", notes: input.notes || `دفعة ${party.name}`, partyId: party.id, userId });
+    const [cashTransaction] = await tx
+      .insert(cashTransactions)
+      .values({ cashboxId: cashbox.id, kind: party.type === "customer" ? "party_payment" : "expense", amount: input.amount.toFixed(2), category: party.type === "customer" ? "تحصيل من عميل" : "سداد مورد", notes: input.notes || `دفعة ${party.name}`, partyId: party.id, userId })
+      .returning({ id: cashTransactions.id });
+    await tx.insert(partyLedger).values({ partyId: party.id, cashTransactionId: cashTransaction.id, kind: "payment", debit: party.type === "supplier" ? input.amount.toFixed(2) : "0", credit: party.type === "customer" ? input.amount.toFixed(2) : "0", notes: input.notes || "دفعة حساب" });
   });
   revalidatePath(`/parties/${party.id}`); revalidatePath("/parties"); revalidatePath("/finance"); revalidatePath("/");
 }

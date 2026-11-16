@@ -19,6 +19,8 @@ import {
   Coins,
   CreditCard,
   Layers,
+  Search,
+  ChevronDown,
 } from "lucide-react";
 import { saveInvoice } from "./actions";
 import { CloseDisclosureButton } from "@/components/close-disclosure-button";
@@ -81,6 +83,126 @@ type InitialInvoice = {
   tax: string;
   lines: Line[];
 };
+
+type SearchableOption = {
+  value: string;
+  label: string;
+  searchText?: string;
+};
+
+function SearchableDropdown({
+  value,
+  options,
+  onChange,
+  placeholder,
+  searchPlaceholder,
+  emptyMessage,
+  ariaLabel,
+  name,
+  locale,
+}: {
+  value: string;
+  options: SearchableOption[];
+  onChange: (value: string) => void;
+  placeholder: string;
+  searchPlaceholder: string;
+  emptyMessage: string;
+  ariaLabel: string;
+  name?: string;
+  locale: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const filteredOptions = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return options;
+    return options.filter((option) =>
+      `${option.label} ${option.searchText ?? ""}`.toLocaleLowerCase().includes(normalizedQuery)
+    );
+  }, [options, query]);
+  const selectedOption = options.find((option) => option.value === value);
+  const close = () => {
+    setIsOpen(false);
+    setQuery("");
+  };
+
+  return (
+    <div
+      className="relative"
+      onBlur={(event) => {
+        if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) {
+          close();
+        }
+      }}
+    >
+      {name && <input type="hidden" name={name} value={value} />}
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onClick={() => {
+          if (isOpen) close();
+          else setIsOpen(true);
+        }}
+        className="w-full flex items-center justify-between gap-2 bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2.5 text-xs font-bold text-[var(--ink)] text-start focus:outline-none focus:border-[var(--primary)]"
+      >
+        <span className="truncate">{selectedOption?.label ?? placeholder}</span>
+        <ChevronDown size={14} className={`shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+      {isOpen && (
+        <div className="absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-[var(--input-border)] bg-[var(--panel)] shadow-lg">
+          <div className="relative border-b border-[var(--line)] p-2">
+            <Search size={14} className={`absolute ${locale === "ar" ? "right-5" : "left-5"} top-1/2 -translate-y-1/2 text-[var(--muted)] pointer-events-none`} />
+            <input
+              autoFocus
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  close();
+                } else if (event.key === "Enter" && filteredOptions[0]) {
+                  event.preventDefault();
+                  onChange(filteredOptions[0].value);
+                  close();
+                }
+              }}
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
+              className={`w-full ${locale === "ar" ? "pr-8 pl-2" : "pl-8 pr-2"} py-2 text-xs bg-[var(--input-bg)] border border-[var(--input-border)] rounded-md font-semibold`}
+            />
+          </div>
+          <div role="listbox" aria-label={ariaLabel} className="max-h-60 overflow-y-auto p-1">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="option"
+                  aria-selected={option.value === value}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    onChange(option.value);
+                    close();
+                  }}
+                  className={`w-full rounded-md px-2.5 py-2 text-start text-xs transition-colors hover:bg-[var(--bg)] ${
+                    option.value === value ? "font-bold text-[var(--primary)]" : "text-[var(--ink)]"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))
+            ) : (
+              <p className="px-2.5 py-3 text-xs text-[var(--muted)]">{emptyMessage}</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function InvoiceForm({
   products,
@@ -352,7 +474,35 @@ export function InvoiceForm({
     }
   };
 
-  const partyList = parties.filter((p) => p.type === (isCustomerType ? "customer" : "supplier"));
+  const partyList = useMemo(
+    () => parties.filter((party) => party.type === (isCustomerType ? "customer" : "supplier")),
+    [isCustomerType, parties]
+  );
+  const partyOptions = useMemo<SearchableOption[]>(
+    () => [
+      {
+        value: "",
+        label: isCustomerType
+          ? locale === "en" ? "Walk-in Cash Customer (No Account)" : "عميل صالة نقدي (كاش فقط)"
+          : locale === "en" ? "Cash Vendor (No Account)" : "مورد نقدي بدون حساب",
+      },
+      ...partyList.map((party) => ({ value: party.id, label: party.name })),
+    ],
+    [isCustomerType, locale, partyList]
+  );
+  const productOptions = useMemo<SearchableOption[]>(
+    () =>
+      products.map((product) => {
+        const price = isCustomerType ? product.salePrice : product.costPrice;
+        const stockPieces = Math.floor(Number(product.stock));
+        return {
+          value: product.id,
+          label: `${product.name} — (${locale === "en" ? `Available: ${stockPieces} pcs` : `المتاح: ${stockPieces} قطعة`}) · ${formatAmount(price)} ${currency}`,
+          searchText: `${product.name} ${product.sku} ${product.barcode ?? ""}`,
+        };
+      }),
+    [currency, isCustomerType, locale, products]
+  );
 
   const updateLineProduct = (index: number, newProductId: string) => {
     const product = products.find((item) => item.id === newProductId);
@@ -885,26 +1035,20 @@ export function InvoiceForm({
           <label className="block text-xs font-bold text-[var(--ink)] mb-1.5">
             {isCustomerType ? t("invoices.customer", "العميل المستفيد") : t("invoices.supplier", "المورد / شركة التوريد")}
           </label>
-          <select
+          <SearchableDropdown
             name="partyId"
             value={partyId}
-            onChange={(e) => {
-              setPartyId(e.target.value);
+            options={partyOptions}
+            onChange={(value) => {
+              setPartyId(value);
               setFormError(null);
             }}
-            className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2.5 text-xs font-bold text-[var(--ink)] focus:outline-none focus:border-[var(--primary)]"
-          >
-            <option value="">
-              {isCustomerType
-                ? (locale === "en" ? "Walk-in Cash Customer (No Account)" : "عميل صالة نقدي (كاش فقط)")
-                : (locale === "en" ? "Cash Vendor (No Account)" : "مورد نقدي بدون حساب")}
-            </option>
-            {partyList.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+            placeholder={isCustomerType ? t("invoices.customer", "العميل المستفيد") : t("invoices.supplier", "المورد / شركة التوريد")}
+            searchPlaceholder={locale === "en" ? "Search customer or supplier..." : "ابحث عن عميل أو مورد..."}
+            emptyMessage={t("common.noMatchingResults", "لا توجد نتائج تطابق معايير البحث الحالية.")}
+            ariaLabel={isCustomerType ? t("invoices.customer", "العميل المستفيد") : t("invoices.supplier", "المورد / شركة التوريد")}
+            locale={locale}
+          />
           {selectedParty && (
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-xs" aria-live="polite">
               <span className="font-semibold text-slate-700">{locale === "en" ? "Previous account balance" : "الحساب السابق"}</span>
@@ -1013,24 +1157,19 @@ export function InvoiceForm({
 
       {/* Product Selector, Unit Selector and Line Adder */}
       <div className="line-adder grid grid-cols-1 md:grid-cols-12 gap-3 p-4 bg-[var(--bg)] border border-[var(--line)] rounded-xl items-end shadow-xs">
-        <label className="md:col-span-5">
+        <div className="md:col-span-5">
           <span className="block text-xs font-bold text-[var(--ink)] mb-1.5">{t("invoices.selectProduct", "اختيار الصنف")}</span>
-          <select
-            className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-xs font-bold text-[var(--ink)]"
+          <SearchableDropdown
             value={productId}
-            onChange={(e) => onProductSelect(e.target.value)}
-          >
-            {products.map((p) => {
-              const price = isCustomerType ? p.salePrice : p.costPrice;
-              const stockPieces = Math.floor(Number(p.stock));
-              return (
-                <option key={p.id} value={p.id}>
-                  {p.name} — ({locale === "en" ? `Available: ${stockPieces} pcs` : `المتاح: ${stockPieces} قطعة`}) · {formatAmount(price)} {t("common.egp", "ج.م")}
-                </option>
-              );
-            })}
-          </select>
-        </label>
+            options={productOptions}
+            onChange={onProductSelect}
+            placeholder={t("invoices.selectProduct", "اختيار الصنف")}
+            searchPlaceholder={t("inventory.searchPlaceholder", "ابحث بالاسم أو الكود أو الباركود...")}
+            emptyMessage={t("common.noMatchingResults", "لا توجد نتائج تطابق معايير البحث الحالية.")}
+            ariaLabel={t("invoices.selectProduct", "اختيار الصنف")}
+            locale={locale}
+          />
+        </div>
 
         <label className="md:col-span-3">
           <span className="flex items-center justify-between text-xs font-bold text-[var(--ink)] mb-1.5">

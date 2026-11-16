@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { ArrowLeftRight, ArrowRight, Banknote, Landmark, Plus, Receipt, Wallet, Pencil, Trash2 } from "lucide-react";
 import { getSessionUserId } from "@/server/auth/session";
 import { db } from "@/server/db";
-import { cashTransactions, cashboxes, permissions, settings, users } from "@/server/db/schema";
+import { cashTransactions, cashboxes, partyLedger, permissions, settings, users } from "@/server/db/schema";
 import { addCashTransaction, createCashbox, deactivateCashbox, deleteCashTransaction, transferCash, updateCashbox } from "@/features/finance/actions";
 import { requirePermission } from "@/server/permissions";
 import { CloseDisclosureButton } from "@/components/close-disclosure-button";
@@ -58,15 +58,39 @@ export default async function FinancePage() {
     db.select({ id: cashboxes.id, name: cashboxes.name }).from(cashboxes),
   ]);
 
+  const linkedPartyPaymentIds = new Set(
+    txs.length
+      ? (
+          await db
+            .select({ cashTransactionId: partyLedger.cashTransactionId })
+            .from(partyLedger)
+            .where(inArray(partyLedger.cashTransactionId, txs.map((transaction) => transaction.id)))
+        ).flatMap((entry) => entry.cashTransactionId ? [entry.cashTransactionId] : [])
+      : [],
+  );
   const totals = new Map(aggregates.map((x) => [x.cashboxId, Number(x.balance)]));
   const isTransactionLinked = (tx: (typeof txs)[number]) =>
     Boolean(
       tx.invoiceId ||
-        tx.partyId ||
         tx.kind === "invoice_payment" ||
-        tx.kind === "party_payment" ||
+        ((tx.partyId || tx.kind === "party_payment") && !linkedPartyPaymentIds.has(tx.id)) ||
         ((tx.kind === "transfer_in" || tx.kind === "transfer_out") && !tx.transferId),
     );
+  const transactionDeleteConfirmMessage = (tx: (typeof txs)[number]) =>
+    tx.transferId
+      ? text(
+          "سيتم حذف طرفي هذا التحويل وتحديث أرصدة الخزنتين. هل تريد المتابعة؟",
+          "Both sides of this transfer will be deleted and both cashbox balances updated. Continue?",
+        )
+      : linkedPartyPaymentIds.has(tx.id)
+        ? text(
+            "سيتم حذف حركة الخزنة ودفعة العميل/المورد المرتبطة بها. هل تريد المتابعة؟",
+            "This will delete the cashbox transaction and its linked customer/supplier payment. Continue?",
+          )
+        : text(
+            "هل أنت متأكد من حذف هذه الحركة وتحديث رصيد الخزنة؟",
+            "Are you sure you want to delete this transaction and update the cashbox balance?",
+          );
   const grandTotalCash = boxes.reduce(
     (sum, box) => sum + (Number(box.openingBalance) + (totals.get(box.id) ?? 0)),
     0
@@ -142,9 +166,15 @@ export default async function FinancePage() {
                   {canDelete && (
                     <form action={deactivateCashbox} className="inline-flex">
                       <input type="hidden" name="id" value={box.id} />
-                      <button type="submit" className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">
+                      <ConfirmSubmitButton
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700"
+                        confirmMessage={text(
+                          "سيتم حذف الخزنة وكل حركاتها المالية، بما فيها حركات التحويل المرتبطة. ستظل الفواتير وقيود حسابات العملاء والموردين محفوظة. هل تريد المتابعة؟",
+                          "This will delete the cashbox and all its financial transactions, including linked transfer entries. Invoices and customer/supplier ledger entries will remain. Continue?",
+                        )}
+                      >
                         <Trash2 size={13} /> {text("حذف الخزنة", "Delete cashbox")}
-                      </button>
+                      </ConfirmSubmitButton>
                     </form>
                   )}
                 </div>
@@ -342,17 +372,7 @@ export default async function FinancePage() {
                               <input type="hidden" name="id" value={tx.id} />
                               <ConfirmSubmitButton
                                 className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700"
-                                confirmMessage={
-                                  tx.transferId
-                                    ? text(
-                                        "سيتم حذف طرفي هذا التحويل وتحديث أرصدة الخزنتين. هل تريد المتابعة؟",
-                                        "Both sides of this transfer will be deleted and both cashbox balances updated. Continue?",
-                                      )
-                                    : text(
-                                        "هل أنت متأكد من حذف هذه الحركة وتحديث رصيد الخزنة؟",
-                                        "Are you sure you want to delete this transaction and update the cashbox balance?",
-                                      )
-                                }
+                                confirmMessage={transactionDeleteConfirmMessage(tx)}
                               >
                                 <Trash2 size={13} /> {text("حذف الحركة", "Delete transaction")}
                               </ConfirmSubmitButton>
@@ -418,17 +438,7 @@ export default async function FinancePage() {
                         <input type="hidden" name="id" value={tx.id} />
                         <ConfirmSubmitButton
                           className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700"
-                          confirmMessage={
-                            tx.transferId
-                              ? text(
-                                  "سيتم حذف طرفي هذا التحويل وتحديث أرصدة الخزنتين. هل تريد المتابعة؟",
-                                  "Both sides of this transfer will be deleted and both cashbox balances updated. Continue?",
-                                )
-                              : text(
-                                  "هل أنت متأكد من حذف هذه الحركة وتحديث رصيد الخزنة؟",
-                                  "Are you sure you want to delete this transaction and update the cashbox balance?",
-                                )
-                          }
+                          confirmMessage={transactionDeleteConfirmMessage(tx)}
                         >
                           <Trash2 size={13} /> {text("حذف الحركة", "Delete transaction")}
                         </ConfirmSubmitButton>
