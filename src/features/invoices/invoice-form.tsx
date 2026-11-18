@@ -171,7 +171,7 @@ function SearchableDropdown({
               }}
               placeholder={searchPlaceholder}
               aria-label={searchPlaceholder}
-              className={`w-full ${locale === "ar" ? "pr-8 pl-2" : "pl-8 pr-2"} py-2 text-xs bg-[var(--input-bg)] border border-[var(--input-border)] rounded-md font-semibold`}
+              className="w-full py-2 text-xs bg-[var(--input-bg)] border border-[var(--input-border)] rounded-md font-semibold"
             />
           </div>
           <div role="listbox" aria-label={ariaLabel} className="max-h-60 overflow-y-auto p-1">

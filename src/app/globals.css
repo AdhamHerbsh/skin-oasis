@@ -1086,6 +1086,10 @@ summary:active {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+.invoice-form input[type="search"] {
+  padding-inline-start: 2.75rem;
+}
+
 .form-grid textarea,
 .inline-form textarea,
 .invoice-form textarea {
