@@ -885,6 +885,16 @@ export function InvoiceForm({
           setFormError(text("لا يمكن تعديل فواتير المرتجعات من هذه الشاشة.", "Return invoices cannot be edited."));
         } else if (code === "INVOICE_TYPE_CANNOT_CHANGE") {
           setFormError(text("لا يمكن تغيير نوع الفاتورة أثناء التعديل.", "The invoice type cannot be changed during editing."));
+        } else if (code === "23503") {
+          setFormError(text("تعذر التعديل لوجود بيانات مرتبطة بهذه الفاتورة أو لأن أحد الأصناف/الأطراف محذوف.", "Could not edit because linked invoice data or a selected record is no longer available."));
+        } else if (code === "23505") {
+          setFormError(text("تعذر التعديل بسبب تكرار سجل مرتبط بالفاتورة.", "Could not edit because a linked record duplicates an existing value."));
+        } else if (code === "23514" || code === "22P02" || code === "22003") {
+          setFormError(text("تعذر التعديل بسبب قيمة غير صالحة في البيانات المحفوظة.", "Could not edit because one of the saved values is invalid."));
+        } else if (code === "42703" || code === "42P01") {
+          setFormError(text("تعذر التعديل بسبب عدم اكتمال نسخة قاعدة البيانات. أعد تشغيل migrations ثم حاول مرة أخرى.", "Could not edit because the database schema is incomplete. Run migrations and try again."));
+        } else if (code === "ECONNREFUSED" || code === "57P01") {
+          setFormError(text("تعذر الاتصال بقاعدة البيانات مؤقتًا. تحقق من تشغيل النظام ثم حاول مرة أخرى.", "Could not connect to the database temporarily. Check that the system is running and try again."));
         } else {
           setFormError(text(`تعذر حفظ الفاتورة: ${code}`, `Could not save invoice: ${code}`));
         }
@@ -1278,17 +1288,17 @@ export function InvoiceForm({
       </div>
 
       {/* Items Desktop Table (>= 768px) */}
-      <div className="desktop-table-only table-wrap">
-        <table>
+      <div className="desktop-table-only table-wrap invoice-lines-desktop">
+        <table className="invoice-lines-table">
           <thead>
             <tr>
-              <th>{t("invoices.item", "الصنف")}</th>
-              <th className="text-center">{t("invoices.quantity", "الكمية")}</th>
-              <th className="text-center">{text("السعر", "Price")}</th>
-              <th className="text-center">{text("البونص", "Bonus")}</th>
-              <th className="text-center">{text("الخصم", "Discount")}</th>
-              <th className="text-center">{text("السعر بعد الخصم", "Price after discount")}</th>
-              <th className="text-center">{t("invoices.total", "الإجمالي")}</th>
+              <th className="invoice-product-column">{t("invoices.item", "الصنف")}</th>
+              <th className="text-center invoice-quantity-column">{t("invoices.quantity", "الكمية")}</th>
+              <th className="text-center invoice-price-column">{text("السعر", "Price")}</th>
+              <th className="text-center invoice-bonus-column">{text("البونص", "Bonus")}</th>
+              <th className="text-center invoice-discount-column">{text("الخصم", "Discount")}</th>
+              <th className="text-center invoice-net-column">{text("السعر بعد الخصم", "Price after discount")}</th>
+              <th className="text-center invoice-total-column">{t("invoices.total", "الإجمالي")}</th>
             </tr>
           </thead>
           <tbody>
@@ -1300,11 +1310,12 @@ export function InvoiceForm({
 
               return (
                 <tr key={`${line.productId}-${index}`} className="transition-colors">
-                  <td className="font-bold text-[var(--ink)] min-w-44">
+                  <td className="font-bold text-[var(--ink)] invoice-product-column">
                     <div className="flex items-start justify-between gap-2">
-                      <select
+                      <div className="min-w-0 flex-1">
+                        <select
                         aria-label={text("الصنف", "Product")}
-                        className="table-input min-w-0 flex-1 text-xs font-bold"
+                        className="table-input w-full min-w-[230px] text-xs font-bold"
                         value={line.productId}
                         onChange={(e) => updateLineProduct(index, e.target.value)}
                       >
@@ -1319,6 +1330,7 @@ export function InvoiceForm({
                           </option>
                         ))}
                       </select>
+                      </div>
                       <button
                         className="danger-link p-1 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg cursor-pointer"
                         type="button"
@@ -1489,7 +1501,7 @@ export function InvoiceForm({
       </div>
 
       {/* Items Mobile Card List (< 768px) */}
-      <div className="mobile-cards-only space-y-3">
+      <div className="mobile-cards-only invoice-lines-mobile space-y-3">
         {lines.length > 0 ? (
           lines.map((line, index) => {
             const amounts = calculateInvoiceLineAmounts(Number(line.quantity), Number(line.unitPrice), Number(line.discountValue), line.discountType);
@@ -1504,7 +1516,7 @@ export function InvoiceForm({
               >
                 {/* Header: Name + Delete */}
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <select
                       aria-label={text("الصنف", "Product")}
                       className="w-full min-w-0 bg-[var(--bg)] border border-[var(--line-strong)] rounded-lg py-1.5 px-2 text-xs font-bold text-[var(--ink)]"
@@ -1539,7 +1551,7 @@ export function InvoiceForm({
                 </div>
 
                 {/* Controls: Unit Dropdown + Quantity Stepper */}
-                <div className="grid grid-cols-3 gap-2 pt-1 border-t border-[var(--line)]/60">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-[var(--line)]/60">
                   <div>
                     <label className="text-[10px] text-[var(--muted)] font-bold block mb-1">
                       {text("الوحدة / التعبئة:", "Unit / packaging:")}

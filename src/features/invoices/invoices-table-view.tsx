@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
 import Link from "next/link";
 import { Search, ShoppingCart, Truck, RotateCcw, ArrowDownLeft, X, Eye, Trash2 } from "lucide-react";
 import { useI18n } from "@/lib/i18n-client";
-import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { removeInvoice } from "./actions";
 
 type InvoiceItem = {
@@ -21,10 +21,70 @@ type InvoiceItem = {
   partyName: string | null;
 };
 
+function DeleteInvoiceButton({
+  invoiceId,
+  invoiceNumber,
+  confirmMessage,
+  className,
+  title,
+  ariaLabel,
+  children,
+  onError,
+}: {
+  invoiceId: string;
+  invoiceNumber: string;
+  confirmMessage: string;
+  className: string;
+  title: string;
+  ariaLabel: string;
+  children: ReactNode;
+  onError: (message: string) => void;
+}) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!window.confirm(confirmMessage)) return;
+    const formData = new FormData(event.currentTarget);
+    setIsDeleting(true);
+    try {
+      const result = await removeInvoice(formData);
+      if (result.ok) {
+        onError("");
+      } else {
+        const messages: Record<string, string> = {
+          INVOICE_HAS_LINKED_RETURNS: `لا يمكن حذف الفاتورة ${invoiceNumber} لأنها مرتبطة بمرتجع.`,
+          INVOICE_NOT_FOUND: `الفاتورة ${invoiceNumber} لم تعد موجودة.`,
+          CANNOT_REVERSE_INVOICE_STOCK: "تعذر حذف الفاتورة لأن عكس أثر المخزون سيؤدي إلى رصيد سالب.",
+          CANNOT_REVERSE_INVOICE_CASH_BALANCE: "تعذر حذف الفاتورة لأن عكس حركة الخزينة سيجعل الرصيد سالبًا.",
+          ECONNREFUSED: "تعذر الاتصال بقاعدة البيانات مؤقتًا.",
+        };
+        const code = "code" in result ? String(result.code) : "UNKNOWN";
+        const message = "message" in result ? String(result.message) : "";
+        onError(messages[code] ?? `تعذر حذف الفاتورة ${invoiceNumber}: ${message}`);
+      }
+    } catch (error) {
+      onError(error instanceof Error ? `تعذر حذف الفاتورة ${invoiceNumber}: ${error.message}` : `تعذر حذف الفاتورة ${invoiceNumber}.`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input type="hidden" name="id" value={invoiceId} />
+      <button type="submit" disabled={isDeleting} className={className} title={title} aria-label={ariaLabel}>
+        {children}
+      </button>
+    </form>
+  );
+}
+
 export function InvoicesTableView({ rows, canDelete }: { rows: InvoiceItem[]; canDelete: boolean }) {
   const { t, locale } = useI18n();
   const [tab, setTab] = useState<"all" | "sale" | "purchase" | "sale_return" | "purchase_return">("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const counts = useMemo(() => {
     return {
@@ -55,6 +115,14 @@ export function InvoicesTableView({ rows, canDelete }: { rows: InvoiceItem[]; ca
 
   return (
     <div className="space-y-4">
+      {deleteError && (
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-700 flex items-center justify-between gap-3">
+          <span>{deleteError}</span>
+          <button type="button" onClick={() => setDeleteError(null)} className="cursor-pointer text-rose-700" aria-label={t("common.close", "إغلاق")}>
+            <X size={15} />
+          </button>
+        </div>
+      )}
       {/* Category Tabs & Search Bar */}
       <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
         {/* Navigation Tabs */}
@@ -284,18 +352,18 @@ export function InvoicesTableView({ rows, canDelete }: { rows: InvoiceItem[]; ca
                           <span>{t("invoices.openPrint", "فتح وطباعة")}</span>
                         </Link>
                         {canDelete && (
-                          <form action={removeInvoice}>
-                            <input type="hidden" name="id" value={row.id} />
-                            <ConfirmSubmitButton
-                              className="h-8 px-2.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 inline-flex items-center gap-1.5 text-xs font-bold cursor-pointer"
-                              title={t("invoices.delete", "Delete invoice")}
-                              ariaLabel={`${t("invoices.delete", "Delete invoice")} ${row.number}`}
-                              confirmMessage={`${t("invoices.confirmDelete", "Are you sure you want to delete invoice")} ${row.number}? ${t("invoices.deleteWarning", "Its stock and account effects will be reversed.")}`}
-                            >
-                              <Trash2 size={13} />
-                              <span>{t("invoices.delete", "Delete")}</span>
-                            </ConfirmSubmitButton>
-                          </form>
+                          <DeleteInvoiceButton
+                            invoiceId={row.id}
+                            invoiceNumber={row.number}
+                            className="h-8 px-2.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 inline-flex items-center gap-1.5 text-xs font-bold cursor-pointer disabled:opacity-60"
+                            title={t("invoices.delete", "Delete invoice")}
+                            ariaLabel={`${t("invoices.delete", "Delete invoice")} ${row.number}`}
+                            confirmMessage={`${t("invoices.confirmDelete", "Are you sure you want to delete invoice")} ${row.number}? ${t("invoices.deleteWarning", "Its stock and account effects will be reversed.")}`}
+                            onError={setDeleteError}
+                          >
+                            <Trash2 size={13} />
+                            <span>{t("invoices.delete", "Delete")}</span>
+                          </DeleteInvoiceButton>
                         )}
                       </div>
                     </td>
@@ -411,18 +479,18 @@ export function InvoicesTableView({ rows, canDelete }: { rows: InvoiceItem[]; ca
                     <span>{t("invoices.openPrint", "فتح وتفاصيل الفاتورة وطباعتها")}</span>
                   </Link>
                   {canDelete && (
-                    <form action={removeInvoice} className="mt-2">
-                      <input type="hidden" name="id" value={row.id} />
-                      <ConfirmSubmitButton
-                        className="w-full py-2 px-3 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center justify-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
-                        title={t("invoices.delete", "Delete invoice")}
-                        ariaLabel={`${t("invoices.delete", "Delete invoice")} ${row.number}`}
-                        confirmMessage={`${t("invoices.confirmDelete", "Are you sure you want to delete invoice")} ${row.number}? ${t("invoices.deleteWarning", "Its stock and account effects will be reversed.")}`}
-                      >
-                        <Trash2 size={14} />
-                        <span>{t("invoices.delete", "Delete invoice")}</span>
-                      </ConfirmSubmitButton>
-                    </form>
+                    <DeleteInvoiceButton
+                      invoiceId={row.id}
+                      invoiceNumber={row.number}
+                      className="w-full py-2 px-3 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center justify-center gap-1.5 text-xs font-bold transition-colors cursor-pointer disabled:opacity-60"
+                      title={t("invoices.delete", "Delete invoice")}
+                      ariaLabel={`${t("invoices.delete", "Delete invoice")} ${row.number}`}
+                      confirmMessage={`${t("invoices.confirmDelete", "Are you sure you want to delete invoice")} ${row.number}? ${t("invoices.deleteWarning", "Its stock and account effects will be reversed.")}`}
+                      onError={setDeleteError}
+                    >
+                      <Trash2 size={14} />
+                      <span>{t("invoices.delete", "Delete invoice")}</span>
+                    </DeleteInvoiceButton>
                   )}
                 </div>
               </div>

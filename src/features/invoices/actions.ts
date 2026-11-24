@@ -70,21 +70,55 @@ export async function saveInvoice(formData: FormData) {
     revalidatePath("/inventory");
     revalidatePath("/", "layout");
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const code = message.includes(":") ? message.split(":")[0] : message;
+    let root: unknown = error;
+    for (let depth = 0; depth < 4 && root && typeof root === "object"; depth++) {
+      const cause = (root as { cause?: unknown }).cause;
+      if (!cause) break;
+      root = cause;
+    }
+    const message = root instanceof Error ? root.message : error instanceof Error ? error.message : String(error);
+    const code =
+      root && typeof root === "object" && "code" in root
+        ? String((root as { code: unknown }).code)
+        : message.includes(":")
+          ? message.split(":")[0]
+          : message;
+    console.error("Invoice save failed", { code, message, error });
     return { ok: false, code, message };
   }
   redirect(`/invoices/${invoiceId!}`);
 }
 
 export async function removeInvoice(formData: FormData) {
-  const userId = await requirePermission("invoices", "delete");
-  const invoiceId = zUuid.parse(formData.get("id"));
-  await deleteInvoice(invoiceId, userId);
-  revalidatePath("/invoices");
-  revalidatePath("/parties");
-  revalidatePath("/finance");
-  revalidatePath("/inventory");
-  revalidatePath("/reports");
-  revalidatePath("/", "layout");
+  try {
+    const userId = await requirePermission("invoices", "delete");
+    const parsed = zUuid.safeParse(formData.get("id"));
+    if (!parsed.success) {
+      return { ok: false, code: "INVALID_INVOICE", message: "معرف الفاتورة غير صالح" };
+    }
+    await deleteInvoice(parsed.data, userId);
+    revalidatePath("/invoices");
+    revalidatePath("/parties");
+    revalidatePath("/finance");
+    revalidatePath("/inventory");
+    revalidatePath("/reports");
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch (error) {
+    let root: unknown = error;
+    for (let depth = 0; depth < 4 && root && typeof root === "object"; depth++) {
+      const cause = (root as { cause?: unknown }).cause;
+      if (!cause) break;
+      root = cause;
+    }
+    const message = root instanceof Error ? root.message : error instanceof Error ? error.message : String(error);
+    const code =
+      root && typeof root === "object" && "code" in root
+        ? String((root as { code: unknown }).code)
+        : message.includes(":")
+          ? message.split(":")[0]
+          : message;
+    console.error("Invoice delete failed", { code, message, error });
+    return { ok: false, code, message };
+  }
 }

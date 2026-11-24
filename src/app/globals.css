@@ -1153,6 +1153,41 @@ summary:active {
   min-width: 640px;
 }
 
+.invoice-lines-table {
+  min-width: 980px;
+  table-layout: fixed;
+}
+
+.invoice-lines-table .invoice-product-column {
+  width: 31%;
+  min-width: 300px;
+  white-space: normal;
+}
+
+.invoice-lines-table .invoice-quantity-column {
+  width: 12%;
+}
+
+.invoice-lines-table .invoice-price-column {
+  width: 13%;
+}
+
+.invoice-lines-table .invoice-bonus-column {
+  width: 8%;
+}
+
+.invoice-lines-table .invoice-discount-column {
+  width: 14%;
+}
+
+.invoice-lines-table .invoice-net-column {
+  width: 11%;
+}
+
+.invoice-lines-table .invoice-total-column {
+  width: 11%;
+}
+
 table {
   width: 100%;
   border-collapse: separate;
@@ -2154,6 +2189,16 @@ html, body {
 @media (min-width: 769px) {
   .mobile-cards-only {
     display: none !important;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1100px) {
+  .invoice-lines-desktop {
+    display: none !important;
+  }
+
+  .invoice-lines-mobile {
+    display: block !important;
   }
 }
 
