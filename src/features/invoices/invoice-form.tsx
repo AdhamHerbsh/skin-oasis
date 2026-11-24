@@ -867,7 +867,29 @@ export function InvoiceForm({
 
     setIsSubmitting(true);
     try {
-      await saveInvoice(formData);
+      const result = await saveInvoice(formData);
+      if (result && !result.ok) {
+        setIsSubmitting(false);
+        const code = result.code;
+        const msg = result.message;
+        if (code === "INSUFFICIENT_STOCK") {
+          const item = msg.split(":")[1]?.trim() || "";
+          setFormError(text(`عفواً، الكمية المطلوبة غير متوفرة في رصيد المستودع للصنف: ${item}`, `The requested quantity is not available in stock for: ${item}`));
+        } else if (code === "INVALID_INVOICE_LINES") {
+          setFormError(text("تعذر قراءة أصناف الفاتورة. احذف الأصناف وأضفها مرة أخرى ثم حاول الحفظ.", "Could not read the invoice items. Remove and re-add them, then try again."));
+        } else if (code === "INVALID_INVOICE") {
+          setFormError(text(`بيانات الفاتورة غير مكتملة أو غير صالحة: ${msg}`, `Invoice details are incomplete or invalid: ${msg}`));
+        } else if (code === "CANNOT_REVERSE_PURCHASE_STOCK") {
+          setFormError(text("لا يمكن تعديل فاتورة الشراء لأن عكس كميتها سيؤدي إلى رصيد مخزون سالب.", "Cannot edit this purchase invoice because reversing its quantity would make stock negative."));
+        } else if (code === "RETURNS_CANNOT_BE_EDITED") {
+          setFormError(text("لا يمكن تعديل فواتير المرتجعات من هذه الشاشة.", "Return invoices cannot be edited."));
+        } else if (code === "INVOICE_TYPE_CANNOT_CHANGE") {
+          setFormError(text("لا يمكن تغيير نوع الفاتورة أثناء التعديل.", "The invoice type cannot be changed during editing."));
+        } else {
+          setFormError(text(`تعذر حفظ الفاتورة: ${code}`, `Could not save invoice: ${code}`));
+        }
+        return;
+      }
     } catch (err) {
       setIsSubmitting(false);
       const msg = err instanceof Error ? err.message : String(err);
