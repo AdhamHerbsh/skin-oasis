@@ -18,7 +18,11 @@ export async function saveParty(formData: FormData) {
   const values = { type: input.type, name: input.name, phone: input.phone || null, email: input.email || null, address: input.address || null, openingBalance: input.openingBalance.toFixed(2) };
   if (id) await db.transaction(async (tx) => {
     await tx.update(parties).set(values).where(eq(parties.id, id));
-    const [opening] = await tx.select().from(partyLedger).where(and(eq(partyLedger.partyId, id), eq(partyLedger.kind, "opening"))).limit(1);
+    const [opening] = await tx
+      .select({ id: partyLedger.id })
+      .from(partyLedger)
+      .where(and(eq(partyLedger.partyId, id), eq(partyLedger.kind, "opening")))
+      .limit(1);
     const debit = input.type === "customer" ? input.openingBalance.toFixed(2) : "0.00";
     const credit = input.type === "supplier" ? input.openingBalance.toFixed(2) : "0.00";
     if (opening && input.openingBalance > 0) await tx.update(partyLedger).set({ debit, credit, notes: "رصيد افتتاحي" }).where(eq(partyLedger.id, opening.id));

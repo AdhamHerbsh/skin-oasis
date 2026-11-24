@@ -37,7 +37,7 @@ import {
   users,
 } from "@/server/db/schema";
 import { requirePermission } from "@/server/permissions";
-import { cashboxBalance } from "@/server/services/ledger-math";
+import { cashboxBalance, partyBalanceTotals } from "@/server/services/ledger-math";
 import { localLogoUrl } from "@/server/services/branding";
 import { translate, Locale } from "@/lib/i18n";
 import { PwaInstallButton } from "@/components/pwa-install-button";
@@ -98,6 +98,7 @@ export default async function Home() {
   let totalProductsCount = 0;
   let totalStockUnits = 0;
   let customerReceivablesTotal = 0;
+  let customerPayablesTotal = 0;
   let supplierPayablesTotal = 0;
 
   let recentInvoices: {
@@ -192,15 +193,15 @@ export default async function Home() {
         .limit(5),
       db
         .select({
-          partyId: partyLedger.partyId,
+          partyId: parties.id,
           partyType: parties.type,
           openingBalance: parties.openingBalance,
           debit: partyLedger.debit,
           credit: partyLedger.credit,
           kind: partyLedger.kind,
         })
-        .from(partyLedger)
-        .innerJoin(parties, eq(parties.id, partyLedger.partyId))
+        .from(parties)
+        .leftJoin(partyLedger, eq(partyLedger.partyId, parties.id))
         .where(isNull(parties.deletedAt)),
       db
         .select({
@@ -248,18 +249,37 @@ export default async function Home() {
     });
 
     // Calculate Customer Receivables & Supplier Payables
-    const partyBalMap = new Map<string, { balance: number; type: string }>();
+    const partyBalMap = new Map<
+      string,
+      { balance: number; type: string; openingBalance: number; hasOpeningEntry: boolean }
+    >();
     for (const row of ledgerEntries) {
-      const p = partyBalMap.get(row.partyId) ?? { balance: 0, type: row.partyType };
-      p.balance +=
-        row.partyType === "customer"
-          ? Number(row.debit) - Number(row.credit)
-          : Number(row.credit) - Number(row.debit);
+      const p = partyBalMap.get(row.partyId) ?? {
+        balance: 0,
+        type: row.partyType,
+        openingBalance: Number(row.openingBalance),
+        hasOpeningEntry: false,
+      };
+      if (row.kind === "opening") p.hasOpeningEntry = true;
+      if (row.kind) {
+        p.balance +=
+          row.partyType === "customer"
+            ? Number(row.debit) - Number(row.credit)
+            : Number(row.credit) - Number(row.debit);
+      }
       partyBalMap.set(row.partyId, p);
     }
     for (const p of partyBalMap.values()) {
-      if (p.type === "customer" && p.balance > 0) customerReceivablesTotal += p.balance;
-      if (p.type === "supplier" && p.balance > 0) supplierPayablesTotal += p.balance;
+      const openingAdjustment = p.hasOpeningEntry
+        ? 0
+        : p.type === "customer"
+          ? p.openingBalance
+          : -p.openingBalance;
+      const balance = p.balance + openingAdjustment;
+      const amounts = partyBalanceTotals(p.type === "customer" ? "customer" : "supplier", balance);
+      customerReceivablesTotal += amounts.receivable;
+      if (p.type === "customer") customerPayablesTotal += amounts.payable;
+      else supplierPayablesTotal += amounts.payable;
     }
 
     recentInvoices = latestInvoices;
@@ -284,7 +304,7 @@ export default async function Home() {
   const todayCashRatio = todaySalesTotal > 0 ? Math.round((todaySalesPaid / todaySalesTotal) * 100) : 100;
   const todayCreditRatio = todaySalesTotal > 0 ? Math.round((todaySalesCredit / todaySalesTotal) * 100) : 0;
   const totalAssetsAtCost = totalCashBalance + inventoryCostValuation + customerReceivablesTotal;
-  const totalLiabilities = supplierPayablesTotal;
+  const totalLiabilities = supplierPayablesTotal + customerPayablesTotal;
   const netLiquidationAtCost = totalAssetsAtCost - totalLiabilities;
   const netLiquidationAtRetail = totalCashBalance + inventorySaleValuation + customerReceivablesTotal - totalLiabilities;
   const logoUrl = localLogoUrl(organization?.logo);
@@ -335,7 +355,7 @@ export default async function Home() {
               {translate("dash.liquidationTitle", locale, "صافي قيمة تصفية المشروع الحالية (حقوق الملكية)")}
             </h2>
             <p className="text-xs text-[var(--muted)] max-w-2xl leading-relaxed">
-              {translate("dash.liquidationExplanation", locale, "يوضح هذا الرقم صافي ما ستحصل عليه كمالك حاليًا، بعد تحصيل النقد من الخزائن، وبيع المخزون بسعر التكلفة، وتحصيل مديونيات العملاء، وسداد مستحقات الموردين.")}
+              {translate("dash.liquidationExplanation", locale, "يوضح هذا الرقم صافي ما ستحصل عليه كمالك حاليًا، بعد تحصيل النقد من الخزائن، وبيع المخزون بسعر التكلفة، وتحصيل مديونيات العملاء، وسداد مستحقات الموردين والعملاء.")}
             </p>
           </div>
 
@@ -421,7 +441,7 @@ export default async function Home() {
             <div>
               <span className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
                 <span className="w-5 h-5 rounded-full bg-rose-200 text-rose-900 flex items-center justify-center text-xs font-black">−</span>
-                <span>{translate("dash.supplierPayables", locale, "مستحقات الموردين (علينا)")}</span>
+                <span>{translate("dash.supplierPayables", locale, "مستحقات الموردين والعملاء (علينا)")}</span>
               </span>
               <b className="text-lg sm:text-xl md:text-2xl font-black text-rose-700 block mt-1.5 dashboard-number">
                 {supplierPayablesTotal.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs font-bold text-rose-600/80">{translate("common.egp", locale, "ج.م")}</small>
@@ -438,7 +458,7 @@ export default async function Home() {
       </section>
 
       {/* 6 High-Performance Enterprise Operational KPI Cards (Themed & Enlarged) */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2.5 sm:gap-3.5 mb-6">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-3.5 mb-6">
         {/* Card 1: Today Sales - BLUE THEME */}
         <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-2xl relative overflow-hidden flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
@@ -493,43 +513,7 @@ export default async function Home() {
           </div>
         </div>
 
-        {/* Card 4: Cash Liquidity - TEAL THEME */}
-        <div className="p-4 bg-teal-50/70 border border-teal-200 rounded-2xl relative overflow-hidden flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-teal-900 font-bold">{translate("dash.cashboxLiquidity", locale, "السيولة النقدية")}</span>
-            <div className="w-8 h-8 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center">
-              <Wallet size={16} />
-            </div>
-          </div>
-          <div>
-            <b className="text-2xl lg:text-3xl text-teal-900 block font-black dashboard-number tracking-tight">
-              {totalCashBalance.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs text-teal-700/80 font-bold">{translate("common.egp", locale, "ج.م")}</small>
-            </b>
-            <span className="text-xs text-teal-700 font-semibold block mt-1">
-              {locale === "en" ? `In ${activeBoxesWithBalance.length} active cashboxes` : `في ${activeBoxesWithBalance.length} خزائن نشطة`}
-            </span>
-          </div>
-        </div>
-
-        {/* Card 5: Inventory Valuation - AMBER THEME */}
-        <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl relative overflow-hidden flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-amber-900 font-bold">{translate("dash.inventoryAtCost", locale, "قيمة بضاعة المخزن")}</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center">
-              <Package size={16} />
-            </div>
-          </div>
-          <div>
-            <b className="text-2xl lg:text-3xl text-amber-900 block font-black dashboard-number tracking-tight">
-              {inventoryCostValuation.toLocaleString(localeCode, { maximumFractionDigits: 2 })} <small className="text-xs text-amber-800/80 font-bold">{translate("common.egp", locale, "ج.م")}</small>
-            </b>
-            <span className="text-xs text-amber-800 font-semibold block mt-1">
-              {totalStockUnits.toLocaleString(localeCode)} {locale === "en" ? `pcs (${totalProductsCount} items)` : `قطعة (${totalProductsCount} صنف)`}
-            </span>
-          </div>
-        </div>
-
-        {/* Card 6: Reorder Alert - ROSE / EMERALD THEME */}
+        {/* Card 4: Reorder Alert - ROSE / EMERALD THEME */}
         <div
           className={`p-4 border rounded-2xl relative overflow-hidden flex flex-col justify-between ${
             lowCount > 0 ? "bg-rose-50/70 border-rose-200" : "bg-emerald-50/70 border-emerald-200"

@@ -1,1 +1,1 @@
-CREATE UNIQUE INDEX "party_ledger_cash_transaction_uq" ON "party_ledger" USING btree ("cash_transaction_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "party_ledger_cash_transaction_uq" ON "party_ledger" USING btree ("cash_transaction_id");

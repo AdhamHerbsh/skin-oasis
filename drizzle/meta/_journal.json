@@ -64,6 +64,13 @@
       "when": 1793037744849,
       "tag": "0008_spooky_elektra",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793038500000,
+      "tag": "0009_repair_party_ledger_cash_link",
+      "breakpoints": true
     }
   ]
 }

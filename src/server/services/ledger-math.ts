@@ -16,6 +16,19 @@ export function partyLedgerBalanceDelta(
   return type === "customer" ? debit - credit : credit - debit;
 }
 
+export function partyBalanceTotals(type: "customer" | "supplier", balance: number) {
+  if (type === "customer") {
+    return {
+      receivable: Math.max(0, balance),
+      payable: Math.max(0, -balance),
+    };
+  }
+  return {
+    receivable: 0,
+    payable: Math.max(0, balance),
+  };
+}
+
 export function cashboxBalance(opening: string | number, transactions: LedgerTransaction[]) {
   const openingBalance = Number(opening) || 0;
   return transactions.reduce((balance, tx) => {

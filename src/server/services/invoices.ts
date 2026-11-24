@@ -365,7 +365,11 @@ export async function deleteInvoice(invoiceId: string, userId: string) {
     }
 
     const ledgerEntries = await tx
-      .select()
+      .select({
+        partyId: partyLedger.partyId,
+        debit: partyLedger.debit,
+        credit: partyLedger.credit,
+      })
       .from(partyLedger)
       .where(eq(partyLedger.invoiceId, invoice.id));
 
@@ -600,7 +604,14 @@ export async function updateInvoice(invoiceId:string,input:InvoiceInput,userId:s
         userId,
       });
   }
-  const oldLedger = await tx.select().from(partyLedger).where(eq(partyLedger.invoiceId, invoice.id));
+  const oldLedger = await tx
+    .select({
+      partyId: partyLedger.partyId,
+      debit: partyLedger.debit,
+      credit: partyLedger.credit,
+    })
+    .from(partyLedger)
+    .where(eq(partyLedger.invoiceId, invoice.id));
   for (const entry of oldLedger)
     await tx.insert(partyLedger).values({
       partyId: entry.partyId,
