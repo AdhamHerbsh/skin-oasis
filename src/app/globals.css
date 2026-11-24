@@ -1188,6 +1188,32 @@ summary:active {
   width: 11%;
 }
 
+.invoice-lines-table td {
+  vertical-align: top;
+}
+
+.invoice-lines-table .table-input {
+  min-height: 36px;
+}
+
+.invoice-form .invoice-number-input {
+  appearance: textfield;
+  -moz-appearance: textfield;
+  line-height: 1.2;
+}
+
+.invoice-form input[type="number"] {
+  font-family: var(--font-tajawal), 'Cairo', system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.invoice-form .invoice-number-input::-webkit-inner-spin-button,
+.invoice-form .invoice-number-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 table {
   width: 100%;
   border-collapse: separate;
@@ -1355,7 +1381,7 @@ tbody tr:hover td {
 
 .totals-inputs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 

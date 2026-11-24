@@ -227,7 +227,18 @@ export function InvoiceForm({
   const [type, setType] = useState<InvoiceType>(initial?.type ?? "sale");
   const [productId, setProductId] = useState(initial?.lines[0]?.productId ?? products[0]?.id ?? "");
   const [quantity, setQuantity] = useState("1");
-  const [lines, setLines] = useState<Line[]>(() => (initial?.lines ?? []).map((line) => ({ ...line, bonusQuantity: line.bonusQuantity ?? "0", discountValue: line.discountValue ?? "0", discountType: line.discountType ?? "amount", unitPrice: formatAmountInput(Number(line.unitPrice)), basePrice: line.basePrice ? formatAmountInput(Number(line.basePrice)) : undefined, minPrice: line.minPrice ? formatAmountInput(Number(line.minPrice)) : undefined })));
+  const [lines, setLines] = useState<Line[]>(() =>
+    (initial?.lines ?? []).map((line) => ({
+      ...line,
+      quantity: Number.isFinite(Number(line.quantity)) ? String(Number(line.quantity)) : "1",
+      bonusQuantity: Number.isFinite(Number(line.bonusQuantity)) ? String(Number(line.bonusQuantity)) : "0",
+      discountValue: line.discountValue ?? "0",
+      discountType: line.discountType ?? "amount",
+      unitPrice: formatAmountInput(Number(line.unitPrice)),
+      basePrice: line.basePrice ? formatAmountInput(Number(line.basePrice)) : undefined,
+      minPrice: line.minPrice ? formatAmountInput(Number(line.minPrice)) : undefined,
+    }))
+  );
   const [discount, setDiscount] = useState(formatAmountInput(Number(initial?.discount ?? 0)));
   const [tax, setTax] = useState(initial?.tax ?? "0");
   const [paid, setPaid] = useState(formatAmountInput(Number(initial?.paid ?? 0)));
@@ -1246,7 +1257,7 @@ export function InvoiceForm({
               <Minus size={13} />
             </button>
             <input
-              className="w-full text-center font-bold bg-transparent border-0 focus:outline-none text-sm font-mono"
+              className="w-full text-center font-bold bg-transparent border-0 focus:outline-none text-sm"
               type="number"
               min="1"
               step="1"
@@ -1403,7 +1414,7 @@ export function InvoiceForm({
                       </button>
                       <input
                         aria-label={t("invoices.quantity", "الكمية")}
-                        className="table-input w-14 text-center font-bold font-mono py-1"
+                        className="table-input invoice-number-input w-14 text-center font-bold py-1"
                         type="number"
                         min="1"
                         step="1"
@@ -1432,7 +1443,7 @@ export function InvoiceForm({
                     <div className="text-center">
                       <input
                         aria-label={t("invoices.unitPrice", "سعر الوحدة")}
-                        className="table-input w-24 text-center font-bold mx-auto font-mono"
+                        className="table-input w-24 text-center font-bold mx-auto"
                         type="number"
                         min={type === "sale" ? Number(line.minPrice ?? 0) : 0}
                         step="0.01"
@@ -1449,7 +1460,7 @@ export function InvoiceForm({
                   <td>
                     <input
                       aria-label={text("كمية البونص", "Bonus quantity")}
-                      className="table-input w-20 text-center font-bold mx-auto font-mono"
+                      className="table-input invoice-number-input w-20 text-center font-bold mx-auto"
                       type="number"
                       min="0"
                       step="0.001"
@@ -1470,7 +1481,7 @@ export function InvoiceForm({
                       </select>
                       <input
                         aria-label={text("قيمة الخصم", "Discount value")}
-                        className="table-input w-20 text-center font-bold mx-auto font-mono"
+                        className="table-input w-20 text-center font-bold mx-auto"
                         type="number"
                         min="0"
                         max={line.discountType === "percent" ? 100 : Number(line.unitPrice)}
@@ -1622,7 +1633,7 @@ export function InvoiceForm({
                       </button>
                       <input
                         aria-label={t("invoices.quantity", "الكمية")}
-                        className="w-full text-center font-bold font-mono py-1 text-xs bg-transparent border-0"
+                        className="invoice-number-input w-full text-center font-bold py-1 text-sm bg-transparent border-0"
                         type="number"
                         min="1"
                         step="1"
@@ -1648,7 +1659,7 @@ export function InvoiceForm({
                     </label>
                     <input
                       aria-label={text("كمية البونص", "Bonus quantity")}
-                      className="w-full text-center font-bold font-mono py-1.5 text-xs bg-[var(--bg)] border border-[var(--line-strong)] rounded-lg"
+                      className="invoice-number-input w-full text-center font-bold py-1.5 text-sm bg-[var(--bg)] border border-[var(--line-strong)] rounded-lg"
                       type="number"
                       min="0"
                       step="0.001"
@@ -1664,7 +1675,7 @@ export function InvoiceForm({
                     <label className="text-[10px] text-[var(--muted)] block">{text("السعر", "Price")}</label>
                     <input
                       aria-label={text("السعر", "Price")}
-                      className="table-input w-full text-center font-bold font-mono"
+                      className="table-input w-full text-center font-bold"
                       type="number"
                       min={type === "sale" ? Number(line.minPrice ?? 0) : 0}
                       step="0.01"
@@ -1690,7 +1701,7 @@ export function InvoiceForm({
                     </select>
                     <input
                       aria-label={text("قيمة الخصم", "Discount value")}
-                      className="table-input w-full text-center font-bold font-mono"
+                      className="table-input w-full text-center font-bold"
                       type="number"
                       min="0"
                       max={line.discountType === "percent" ? 100 : Number(line.unitPrice)}
@@ -1721,16 +1732,16 @@ export function InvoiceForm({
       </div>
 
       {/* Financial Summary & Payment Calculations */}
-      <div className="totals-inputs grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-[var(--bg)] border border-[var(--line)] rounded-xl shadow-xs">
+      <div className="totals-inputs grid grid-cols-1 gap-3 p-4 bg-[var(--bg)] border border-[var(--line)] rounded-xl shadow-xs">
         {/* Payment Type Toggle Strip */}
-        <div className="sm:col-span-3 p-3 bg-[var(--panel)] border border-[var(--line)] rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-bold text-[var(--ink)]">{t("invoices.paymentMethod", "طريقة السداد:")}</span>
-            <div className="inline-flex p-1 bg-[var(--bg)] border border-[var(--line)] rounded-lg gap-1 text-xs font-bold">
+        <div className="col-span-full min-w-0 p-3 bg-[var(--panel)] border border-[var(--line)] rounded-xl flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3 shadow-2xs">
+          <div className="min-w-0 w-full xl:w-auto flex flex-col xl:flex-row xl:items-center gap-2 xl:gap-4">
+            <span className="shrink-0 text-xs font-bold text-[var(--ink)]">{t("invoices.paymentMethod", "طريقة السداد:")}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 xl:inline-flex xl:mt-0 mt-1 p-1.5 bg-[var(--bg)] border border-[var(--line)] rounded-lg gap-1.5 text-xs font-bold">
               <button
                 type="button"
                 onClick={() => setPaymentMode("cash")}
-                className={`px-3 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1 font-bold ${
+                className={`min-w-0 px-3.5 py-2 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 text-center font-bold ${
                   paymentMode === "cash"
                     ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-600/20"
                     : "text-[var(--muted)] hover:text-[var(--ink)]"
@@ -1742,7 +1753,7 @@ export function InvoiceForm({
               <button
                 type="button"
                 onClick={() => setPaymentMode("credit")}
-                className={`px-3 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1 font-bold ${
+                className={`min-w-0 px-3.5 py-2 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 text-center font-bold ${
                   paymentMode === "credit"
                     ? "bg-rose-600 text-white shadow-sm ring-2 ring-rose-600/20"
                     : "text-[var(--muted)] hover:text-[var(--ink)]"
@@ -1754,7 +1765,7 @@ export function InvoiceForm({
               <button
                 type="button"
                 onClick={() => setPaymentMode("partial")}
-                className={`px-3 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1 font-bold ${
+                className={`min-w-0 px-3.5 py-2 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 text-center font-bold ${
                   paymentMode === "partial"
                     ? "bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-600/20"
                     : "text-[var(--muted)] hover:text-[var(--ink)]"
@@ -1766,7 +1777,7 @@ export function InvoiceForm({
             </div>
           </div>
 
-          <div className="text-left text-xs font-bold">
+          <div className="text-left text-xs font-bold xl:ms-auto xl:max-w-[35%] xl:ps-4">
             {paymentMode === "cash" ? (
               <span className="text-emerald-700">{t("invoices.cashDesc", "سداد الفاتورة بالكامل نقداً في الخزينة")}</span>
             ) : paymentMode === "credit" ? (
@@ -1777,77 +1788,79 @@ export function InvoiceForm({
           </div>
         </div>
 
-        <label>
-          <span className="flex items-center justify-between">
-            <span className="font-bold text-xs text-[var(--ink)]">{t("invoices.discountPercent", "الخصم (%)")}</span>
-            {discountableSubtotal > 0 && <small className="text-[var(--muted)] text-[10px]">{locale === "en" ? `From ${formatAmount(discountableSubtotal)}` : `من ${formatAmount(discountableSubtotal)} ج.م`}</small>}
-          </span>
-          <input
-            type="number"
-            min="0"
-            max="100"
-            step="0.0001"
-            value={discountPercent === "0" ? "" : discountPercent}
-            placeholder="0%"
-            className="font-bold font-mono text-xs mt-1"
-            onChange={(e) => onPercentChange(e.target.value)}
-          />
-        </label>
-
-        <label>
-          <span className="font-bold text-xs text-[var(--ink)]">{t("invoices.discountEgp", "الخصم بالجنيه (ج.م)")}</span>
-          <input
-            name="discount"
-            type="number"
-            min="0"
-            max={discountableSubtotal || undefined}
-            step="0.01"
-            value={discountAmount === 0 ? "" : formatAmountInput(discountAmount)}
-            placeholder="0"
-            className="font-bold font-mono text-xs mt-1"
-            onChange={(e) => onDiscountEgpChange(e.target.value)}
-          />
-        </label>
-
         {/* Hidden tax field with default 0 */}
         <input type="hidden" name="tax" value="0" />
 
-        <label>
-          <span className="flex items-center justify-between font-bold text-xs text-[var(--ink)]">
-            <span>{t("invoices.paidCash", "المدفوع نقداً (ج.م)")}</span>
-            {total > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setPaymentMode("cash");
-                  setPaid(formatAmountInput(total));
-                }}
-                className="text-[10px] text-indigo-700 font-bold hover:underline cursor-pointer"
-              >
-                {t("invoices.payFull", "سداد كامل")}
-              </button>
-            )}
-          </span>
-          <input
-            name="paid"
-            type="number"
-            min="0"
-            step="0.01"
-            max={total}
-            value={effectivePaid === "0" ? "" : effectivePaid}
-            placeholder="0"
-            className="font-bold font-mono text-xs mt-1"
-            onChange={(e) => {
-              setPaid(e.target.value);
-              const val = Number(e.target.value) || 0;
-              if (val >= total && total > 0) setPaymentMode("cash");
-              else if (val === 0) setPaymentMode("credit");
-              else setPaymentMode("partial");
-            }}
-          />
-        </label>
+        <div className="col-span-full grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+          <label className="min-w-0">
+            <span className="flex items-center justify-between gap-2">
+              <span className="font-bold text-xs text-[var(--ink)]">{t("invoices.discountPercent", "الخصم (%)")}</span>
+              {discountableSubtotal > 0 && <small className="text-[var(--muted)] text-[10px]">{locale === "en" ? `From ${formatAmount(discountableSubtotal)}` : `من ${formatAmount(discountableSubtotal)} ج.م`}</small>}
+            </span>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.0001"
+              value={discountPercent === "0" ? "" : discountPercent}
+              placeholder="0%"
+              className="font-bold text-xs mt-1"
+              onChange={(e) => onPercentChange(e.target.value)}
+            />
+          </label>
 
-        <div className="sm:col-span-3 flex items-center justify-between p-4 bg-[var(--panel)] border border-[var(--line)] rounded-xl">
+          <label className="min-w-0">
+            <span className="font-bold text-xs text-[var(--ink)]">{t("invoices.discountEgp", "الخصم بالجنيه (ج.م)")}</span>
+            <input
+              name="discount"
+              type="number"
+              min="0"
+              max={discountableSubtotal || undefined}
+              step="0.01"
+              value={discountAmount === 0 ? "" : formatAmountInput(discountAmount)}
+              placeholder="0"
+              className="font-bold text-xs mt-1"
+              onChange={(e) => onDiscountEgpChange(e.target.value)}
+            />
+          </label>
+
+          <label className="min-w-0">
+            <span className="flex items-center justify-between gap-2 font-bold text-xs text-[var(--ink)]">
+              <span>{t("invoices.paidCash", "المدفوع نقداً (ج.م)")}</span>
+              {total > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentMode("cash");
+                    setPaid(formatAmountInput(total));
+                  }}
+                  className="text-[10px] text-indigo-700 font-bold hover:underline cursor-pointer"
+                >
+                  {t("invoices.payFull", "سداد كامل")}
+                </button>
+              )}
+            </span>
+            <input
+              name="paid"
+              type="number"
+              min="0"
+              step="0.01"
+              max={total}
+              value={effectivePaid === "0" ? "" : effectivePaid}
+              placeholder="0"
+              className="font-bold text-xs mt-1"
+              onChange={(e) => {
+                setPaid(e.target.value);
+                const val = Number(e.target.value) || 0;
+                if (val >= total && total > 0) setPaymentMode("cash");
+                else if (val === 0) setPaymentMode("credit");
+                else setPaymentMode("partial");
+              }}
+            />
+          </label>
+        </div>
+
+        <div className="col-span-full flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-[var(--panel)] border border-[var(--line)] rounded-xl">
           <div>
             <span className="text-xs text-[var(--muted)] font-semibold block mb-0.5">{t("invoices.subtotal", "المجموع قبل الخصم")}:</span>
             <b className="text-base text-[var(--ink)] font-bold">{formatAmount(subtotal)} {t("common.egp", "ج.م")}</b>
